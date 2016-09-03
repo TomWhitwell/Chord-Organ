@@ -253,14 +253,7 @@ void loop(){
             }
 
         }
-                    Serial.print(" 0:");
-            Serial.print(FREQ[0]);
-            Serial.print(" 1:");
-            Serial.print(FREQ[1]);
-            Serial.print(" 2:");
-            Serial.print(FREQ[2]);
-            Serial.print(" 3:");
-            Serial.println(FREQ[3]);
+
     }
 
 
@@ -377,73 +370,28 @@ void checkInterface(){
 
 //////////////////////////////////////////////
 ////READ AND WRITE SETTINGS ON THE SD CARD ///
-////VIA http://overskill.alexshu.com/?p=107 ///
 //////////////////////////////////////////////
 
 
-
-
 void readSDSettings(){
-
-    // print out array 
-    Serial.println("---start array - before ---");
-    for (int a = 0; a< chordCount; a++){
-        for(int i = 0; i< SINECOUNT; i++){
-            //            Serial.print (a);
-            //            Serial.print("/");
-            //            Serial.print(i); 
-            //            Serial.print(":");
-            Serial.print(notesSD[a][i]);
-            Serial.print("|");
-        }
-        Serial.println("");
-    }
-    Serial.println("---end array---");
-    // end array printout 
-
-
-
-
     char character;
     int entry = 0;
     int note = 0;
     String settingValue;
     boolean inBracket = false;
     settingsFile = SD.open("chorder.txt");
-
-    //    if (settingsFile) {
     while (settingsFile.available()) {
-
-
         character = settingsFile.read();   
-        Serial.println("---");
-        Serial.print("I have read:");
-        Serial.println(character);
-
         if (character == '[') {
-            Serial.print("Ignore this character, but start concentrating to fill line ");   
-            Serial.println(entry);
-
             inBracket = true; 
         }
-
         if (character == ','  && inBracket){
-            Serial.print("Ignore this character, write ");
-            Serial.print (settingValue);
-            Serial.print(" to array at "); 
-            Serial.println(note); 
-
-            notesSD[entry][note] = settingValue.toInt();
+   notesSD[entry][note] = settingValue.toInt();
             settingValue = "";   
             note++;
-
         }
 
         if (character == ']'  && inBracket) {
-            Serial.print("Ignore this character, write ");
-            Serial.print (settingValue);
-            Serial.print(" to array at "); 
-            Serial.println(note); 
             notesSD[entry][note] = settingValue.toInt();
             settingValue = "";
             entry++;
@@ -453,220 +401,11 @@ void readSDSettings(){
 
         else if (inBracket && character != '[' && character != ',' && character != ']'){
             settingValue += character; 
-            Serial.print("add to store. Store is now ");
-            Serial.println (settingValue);
-
         }
 
     }   
-    //        character = settingsFile.read();
-    //        Serial.print("---1:");
-    //        Serial.println(character);
-    //        while(character != '[' && settingsFile.available()){ // skip past anything not an open bracket 
-    //            character = settingsFile.read();
-    //            Serial.print("---2:");
-    //            Serial.println(character);
-    //
-    //        }
-    //
-    //        while(character != ']' && settingsFile.available()){ // keep scanning until a close bracket 
-    //            if (character != ','){
-    //                settingValue += character;   
-    //            }
-    //            else{
-    //
-    //                Serial.print("A writing ");
-    //                Serial.print(settingValue.toInt());
-    //                Serial.print(" to row ");
-    //                Serial.print(entry);
-    //                Serial.print(" column ");
-    //                Serial.println(note);
-    //
-    //                notesSD[entry][note] = settingValue.toInt();
-    //                note++;
-    //                settingValue = "";  
-    //            }
-    //            character = settingsFile.read();
-    //            Serial.print("---3:");
-    //            Serial.println(character);
-    //        }
-    //        if (character == ']'){
-    //
-    //            Serial.print("B writing ");
-    //            Serial.print(settingValue.toInt());
-    //            Serial.print(" to row ");
-    //            Serial.print(entry);
-    //            Serial.print(" column ");
-    //            Serial.println(note);
-    //
-    //            notesSD[entry][note] = settingValue.toInt();
-    //            settingValue = "";  
-    //            note = 0;
-    //            entry++;
-    //        }
-    //
-    //    }
-    //    // close the file:
     settingsFile.close();
-    //    } 
-    //    else {
-    //        // if the file didn't open, print an error:
-    //        Serial.println("error opening chorder.txt");
-    //    }
-
-
-    // print out array 
-    Serial.println("---start array - after ---");
-
-    for (int a = 0; a< chordCount; a++){
-        for(int i = 0; i< SINECOUNT; i++){
-            //            Serial.print (a);
-            //            Serial.print("/");
-            //            Serial.print(i); 
-            //            Serial.print(":");
-            Serial.print(notesSD[a][i]);
-            Serial.print("|");
-
-        }
-        Serial.println("");
-    }
-    Serial.println("---end array---");
-    // end array printout    
 }
-
-
-
-////// OLD VERSION 
-////// OLD VERSION 
-////// OLD VERSION 
-////// OLD VERSION 
-////// OLD VERSION 
-////// OLD VERSION 
-////// OLD VERSION 
-////// OLD VERSION 
-////// OLD VERSION 
-
-void readSDSettingsOLD (){
-
-    // print out array 
-    Serial.println("---start array - before ---");
-
-    for (int a = 0; a< chordCount; a++){
-        for(int i = 0; i< SINECOUNT; i++){
-            //            Serial.print (a);
-            //            Serial.print("/");
-            //            Serial.print(i); 
-            //            Serial.print(":");
-            Serial.print(notesSD[a][i]);
-            Serial.print("|");
-
-        }
-        Serial.println("");
-    }
-    Serial.println("---end array---");
-
-
-    // end array printout 
-
-
-
-
-    char character;
-    int entry = 0;
-    int note = 0;
-    String settingValue;
-    settingsFile = SD.open("chorder.txt");
-
-    //    if (settingsFile) {
-    while (settingsFile.available()) {
-        character = settingsFile.read();
-        Serial.print("---1:");
-        Serial.println(character);
-        while(character != '[' && settingsFile.available()){ // skip past anything not an open bracket 
-            character = settingsFile.read();
-            Serial.print("---2:");
-            Serial.println(character);
-
-        }
-
-        while(character != ']' && settingsFile.available()){ // keep scanning until a close bracket 
-            if (character != ','){
-                settingValue += character;   
-            }
-            else{
-
-                Serial.print("A writing ");
-                Serial.print(settingValue.toInt());
-                Serial.print(" to row ");
-                Serial.print(entry);
-                Serial.print(" column ");
-                Serial.println(note);
-
-                notesSD[entry][note] = settingValue.toInt();
-                note++;
-                settingValue = "";  
-            }
-            character = settingsFile.read();
-            Serial.print("---3:");
-            Serial.println(character);
-        }
-        if (character == ']'){
-
-            Serial.print("B writing ");
-            Serial.print(settingValue.toInt());
-            Serial.print(" to row ");
-            Serial.print(entry);
-            Serial.print(" column ");
-            Serial.println(note);
-
-            notesSD[entry][note] = settingValue.toInt();
-            settingValue = "";  
-            note = 0;
-            entry++;
-        }
-
-    }
-    // close the file:
-    settingsFile.close();
-    //    } 
-    //    else {
-    //        // if the file didn't open, print an error:
-    //        Serial.println("error opening chorder.txt");
-    //    }
-
-
-    // print out array 
-    Serial.println("---start array - after ---");
-
-    for (int a = 0; a< chordCount; a++){
-        for(int i = 0; i< SINECOUNT; i++){
-            Serial.print (a);
-            Serial.print("/");
-            Serial.print(i); 
-            Serial.print(":");
-            Serial.print(notesSD[a][i]);
-            Serial.print("|");
-
-        }
-        Serial.println("");
-    }
-    Serial.println("---end array---");
-    // end array printout    
-}
-
-////// OLD VERSION 
-////// OLD VERSION 
-////// OLD VERSION 
-////// OLD VERSION 
-////// OLD VERSION 
-////// OLD VERSION 
-////// OLD VERSION 
-////// OLD VERSION 
-
-
-
-
-
 
 
 // converting string to Float
@@ -696,21 +435,22 @@ void writeSDSettings() {
     //  // writing in the file works just like regular print()/println() function
     settingsFile.println("Some intro guff here");
 
-    settingsFile.println("[-12,0,12,24]");
-    settingsFile.println("[0,4,7,12]");
-    settingsFile.println("[0,3,7,12]");
-    settingsFile.println("[0,3,7,11]");
-    settingsFile.println("[0,4,5,7]");
-    settingsFile.println("[0,4,7,14]");
-    settingsFile.println("[0,2,4,7]");
-    settingsFile.println("[0,3,6,9]");
-    settingsFile.println("[0,7,12,0]");
-    settingsFile.println("[0,4,7,11]");
-    settingsFile.println("[0,3,7,10]");
-    settingsFile.println("[0,3,7,9]");
-    settingsFile.println("[0,4,6,10]");
-    settingsFile.println("[0,5,7,10]");
-    settingsFile.println("[0,4,7,9]");
+    settingsFile.println("1  [0,4,7,12]");
+    settingsFile.println("2  [0,3,7,12]");
+    settingsFile.println("3  [0,3,7,11]");
+    settingsFile.println("4  [0,4,5,7]");
+    settingsFile.println("5  [0,4,7,14]");
+    settingsFile.println("6  [0,2,4,7]");
+    settingsFile.println("7  [0,3,6,9]");
+    settingsFile.println("8  [0,7,12]");
+    settingsFile.println("9  [0,4,7,11]");
+    settingsFile.println("10 [0,3,7,10]");
+    settingsFile.println("11 [0,3,7,9]");
+    settingsFile.println("12 [0,4,6,10]");
+    settingsFile.println("13 [0,5,7,10]");
+    settingsFile.println("14 [0,4,7,9]");
+    settingsFile.println("15 [0,4,7,9]");
+    settingsFile.println("16 [-12,0,12,24]");
 
     //
 
