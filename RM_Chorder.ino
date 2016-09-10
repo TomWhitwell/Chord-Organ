@@ -1,14 +1,14 @@
-#include <Bounce.h>
+#include <Bounce2.h>
 #include <Audio.h>
 #include <Wire.h>
 #include <SPI.h>
 #include <SD.h>
 #include <SerialFlash.h>
 
-#define CHAN_POT_PIN 9 // pin for Channel pot
-#define CHAN_CV_PIN 6 // pin for Channel CV 
-#define TIME_POT_PIN 7 // pin for Time pot
-#define TIME_CV_PIN 8 // pin for Time CV
+#define CHORD_POT_PIN 9 // pin for Channel pot
+#define CHORD_CV_PIN 6 // pin for Channel CV 
+#define ROOT_POT_PIN 7 // pin for Time pot
+#define ROOT_CV_PIN 8 // pin for Time CV
 #define RESET_BUTTON 8 // Reset button 
 #define RESET_LED 11 // Reset LED indicator 
 #define RESET_CV 9 // Reset pulse input 
@@ -23,54 +23,56 @@
 #define WRITE_RESTART(val) ((*(volatile uint32_t *)RESTART_ADDR) = (val))
 #define SINECOUNT 8
 
+
+// Initialise Array with 999s, to identify unfilled elements when reading from SD card 
 int notesSD[16][8] = {
     {        
-        999,999,999,999,999,999,999,999                                                                                }
+        999,999,999,999,999,999,999,999                                                                                                        }
     ,    
     {        
-        999,999,999,999,999,999,999,999                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                         }
     ,    
     {   
-        999,999,999,999,999,999,999,999                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,989                                                                                }
+        999,999,999,999,999,999,999,989                                                                                                        }
     ,    
 };
 
@@ -94,19 +96,29 @@ float FREQ[SINECOUNT] = {
     55,110, 220, 440, 880,1760,3520,7040};
 float AMP[SINECOUNT] = { 
     0.9, 0.9, 0.9, 0.9,0.9, 0.9, 0.9, 0.9};
-int startNote; 
-int chordPick; 
-int startChosen;
-int chordChosen;
-int startOld;
-int chordOld;
+//int startNote; 
+//int chordPick; 
+//float startChosen;
+//float chordChosen;
+//float startOld;
+//float chordOld;
+
+int chordRaw;
+int chordRawOld;
+int chordQuant;
+int chordQuantOld;
+int rootRaw;
+int rootRawOld;
+int rootQuant;
+int rootQuantOld;
 boolean changed = true;
+
 boolean ResetCV;
-boolean ASR = true; 
+boolean ASR = false; 
 int ASRstep; 
-elapsedMillis ASRtimeout;
+elapsedMillis updateTime;
 elapsedMillis waveChange; 
-elapsedMillis noteChange; 
+int updateCount = 0;
 
 // GUItool: begin automatically generated code
 AudioSynthWaveform       waveform1;      //xy=215,232
@@ -207,57 +219,59 @@ void setup(){
 void loop(){
     checkInterface();
 
-    startChosen = map(startNote,0,1024,36,88);
-    chordChosen = map(chordPick, 0, 1024, 0, chordCount);
-    if (startChosen != startOld || chordChosen != chordOld) changed = true; 
-    startOld = startChosen; 
-    chordOld = chordChosen; 
-
-
     int result;
 
     if (ASR){
 
-        if (ResetCV == 1 && ASRtimeout > 40){
-            Serial.println("inside asr loop");
-            //    result = startChosen + notesSD[chordChosen][ASRstep];
-            result = startChosen ;
-            FREQ[ASRstep] =  numToFreq(result);
-            ASRstep++;
-            ASRstep = ASRstep % 4;
-            ASRtimeout = 0; 
-            Serial.print(" 0:");
-            Serial.print(FREQ[0]);
-            Serial.print(" 1:");
-            Serial.print(FREQ[1]);
-            Serial.print(" 2:");
-            Serial.print(FREQ[2]);
-            Serial.print(" 3:");
-            Serial.println(FREQ[3]);
-            changed = true;
+        //        if (ResetCV == 1){
+        //            int ASRVoices = 4;
+        //            Serial.println("inside asr loop");
+        //            //    result = startChosen + notesSD[chordChosen][ASRstep];
+        //            result = int(startChosen); 
+        //            FREQ[ASRstep] =  numToFreq(result);
+        //            AMP[ASRstep] = 0.95/ASRVoices;
+        //            ASRstep++;
+        //
+        //            ASRstep = ASRstep % ASRVoices;
+        //
+        //            for (int i = ASRVoices; i < SINECOUNT; i++){
+        //                AMP[i] = 0;    
+        //            }
+        //
+        //            changed = true;
+        //
+        //            Serial.print(" 0:");
+        //            Serial.print(FREQ[0]);
+        //            Serial.print(" 1:");
+        //            Serial.print(FREQ[1]);
+        //            Serial.print(" 2:");
+        //            Serial.print(FREQ[2]);
+        //            Serial.print(" 3:");
+        //            Serial.println(FREQ[3]);
 
-        }   
+        //        }   
     }
-    else if (changed) {
+    else if (!ASR && changed) {
+        
         float voiceCount = 0;
-        float voiceTotal = 0;
-        for(int i = 0; i< SINECOUNT; i++){
-            if (notesSD[chordChosen][i] != 999) {
-                result = startChosen + notesSD[chordChosen][i];
-                FREQ[i] =  numToFreq(result);
-                voiceCount++;
-            }
-        }
-        for (int i = 0; i< SINECOUNT; i++){
-            if (notesSD[chordChosen][i] != 999) {
-                AMP[i] = 0.95/voiceCount;
-                voiceTotal += 0.95/voiceCount;
-            }
-            else{
-                AMP[i] = 0;   
-            }
-        }
-        Serial.println(voiceTotal);
+         float voiceTotal = 0;
+         for(int i = 0; i< SINECOUNT; i++){
+         if (notesSD[chordQuant][i] != 999) {
+         result = rootQuant + notesSD[chordQuant][i];
+         FREQ[i] =  numToFreq(result);
+         voiceCount++;
+         }
+         }
+         for (int i = 0; i< SINECOUNT; i++){
+         if (notesSD[int(chordQuant)][i] != 999) {
+         AMP[i] = 0.95/voiceCount;
+         voiceTotal += 0.95/voiceCount;
+         }
+         else{
+         AMP[i] = 0;   
+         }
+         }
+        
     }
 
 
@@ -265,7 +279,7 @@ void loop(){
         waveform++;
         waveform = waveform % 4;
         ledWrite(waveform);
-        updateSines();
+        changed = true;
         waveChange = 0;
 
     }
@@ -281,8 +295,9 @@ void loop(){
 
 
 void updateSines(){
-            envelope1.noteOff();
-        delay(3);
+
+    envelope1.noteOff();
+    delay(3);
 
     AudioNoInterrupts();  
     waveform1.begin(AMP[0],FREQ[0],wave_type[waveform]);
@@ -294,8 +309,9 @@ void updateSines(){
     waveform7.begin(AMP[6],FREQ[6],wave_type[waveform]);
     waveform8.begin(AMP[7],FREQ[7],wave_type[waveform]); 
     AudioInterrupts();
-        envelope1.noteOn();
-        delay(3);
+    envelope1.noteOn();
+    delay(3);
+
 
 }
 
@@ -317,48 +333,77 @@ void ledWrite(int n){
 
 void checkInterface(){
 
-    int chanPot = 0; 
-    int chanCV = 0; 
-    int timPot = 0; 
-    int timCV = 0; 
-    int time;
-    int channel;
 
-    for (int i = 0; i<10; i++){
+    /*
+        if (quantize_) {
+     // Apply hysteresis and filtering to ADC reading to prevent
+     // jittery quantization.
+     if ((v_oct_ > previous_v_oct_ + 16) ||
+     (v_oct_ < previous_v_oct_ - 16)) {
+     previous_v_oct_ = v_oct_;
+     } else {
+     previous_v_oct_ += (v_oct_ - previous_v_oct_) >> 5;
+     v_oct_ = previous_v_oct_;
+     }
+     }
+     
+     
+     float startOld;
+     float chordOld;
+     
+     */
 
-        chanPot += analogRead(CHAN_POT_PIN); 
-        chanCV += analogRead(CHAN_CV_PIN); 
-        timPot += analogRead(TIME_POT_PIN); 
-        timCV += analogRead(TIME_CV_PIN); 
 
+
+
+    // Read pots + CVs
+    int chordPot = analogRead(CHORD_POT_PIN); 
+    int chordCV = analogRead(CHORD_CV_PIN); 
+    int rootPot = analogRead(ROOT_POT_PIN); 
+    int rootCV = analogRead(ROOT_CV_PIN); 
+
+    // Copy pots and CVs to new value 
+    chordRaw = chordPot + chordCV; 
+    chordRaw = constrain(chordRaw, 0, 1023);
+    rootRaw = rootPot + rootCV;   
+    rootRaw = constrain(rootRaw, 0U, 1023U); 
+
+    // Apply hysteresis and filtering to prevent jittery quantization 
+    // Thanks to Matthias Puech for this code 
+
+    if ((chordRaw > chordRawOld + 16) || (chordRaw < chordRawOld - 16)){
+        chordRawOld = chordRaw;    
+    }
+    else {
+        chordRawOld += (chordRaw - chordRawOld) >>5; 
+        chordRaw = chordRawOld;  
     }
 
-    chanPot  = chanPot/10; 
-    chanCV = chanCV/10; 
-    timPot = timPot/10; 
-    timCV = timCV/10; 
+
+    Serial.print("chordRaw=");
+    Serial.print(chordRaw);
+    Serial.print(" rootRaw=");
+    Serial.println(rootRaw);
 
 
+    chordQuant = map(chordRaw, 0, 1024, 0, chordCount);
+    if (chordQuant != chordQuantOld){
+        changed = true; 
+        chordQuantOld = chordQuant;    
+    }
 
-    time = timPot + timCV;   
-    time = constrain(time, 0U, 1023U); 
-    channel = chanPot + chanCV; 
-    channel = constrain(channel, 0, 1023);
-
-    startNote = time; 
-    chordPick = channel; 
+    rootQuant = map(rootRaw,0,1024,36,84); // Range = C-2 (36) to C+2 (84*
+    if (rootQuant != rootQuantOld){
+        changed = true; 
+        rootQuantOld = rootQuant;  
+    }
 
     resetSwitch.update();
     resetButton = resetSwitch.read();
 
-    if ( resetCV.update() ) {
-        //if (resetCV.read()) ResetCV = !ResetCV;
-        ResetCV = resetCV.risingEdge();
-        //        Serial.println(ResetCV);
-        digitalWrite(RESET_LED, ResetCV);
-    }
-
-
+    resetCV.update();
+    ResetCV = resetCV.rose();
+    digitalWrite(RESET_LED, ResetCV);
 
 
 }
@@ -428,7 +473,7 @@ void writeSDSettings() {
     // Create new one
     settingsFile = SD.open("CHORDORG.TXT", FILE_WRITE);
     //  // writing in the file works just like regular print()/println() function
-    settingsFile.println("Edit chord shapes into the spaces below. No more than 16 chords up to 8 notes per chord");
+    settingsFile.println("Edit chord shapes into the spaces below. No more than 16 chords and up to 8 notes per chord. Anything outside the square brackets is ignored");
 
     settingsFile.println("1  [0,4,7,12]");
     settingsFile.println("2  [0,3,7,12]");
@@ -461,6 +506,12 @@ void reBoot(int delayTime){
         delay (delayTime);
     WRITE_RESTART(0x5FA0004);
 }
+
+
+
+
+
+
 
 
 
