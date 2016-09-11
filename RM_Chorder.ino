@@ -422,11 +422,11 @@ void checkInterface(){
 
 
     int buttonState = digitalRead(RESET_BUTTON);
-    if (elapsed1 > 10 && buttonState == 0 && lockOut > 499 ){
+    if (elapsed1 > 10 && buttonState == 0 && lockOut > 999 ){
         shortPress = true;    
     }
     elapsed1 = elapsed1 * buttonState; 
-    if (elapsed1 > 500){
+    if (elapsed1 > 1000){
         longPress = true;
         lockOut = 0;
         elapsed1 = 0;
