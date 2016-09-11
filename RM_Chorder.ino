@@ -29,60 +29,59 @@
 // Initialise Array with 999s, to identify unfilled elements when reading from SD card 
 int notesSD[16][8] = {
     {        
-        999,999,999,999,999,999,999,999                                                                                                                                }
+        999,999,999,999,999,999,999,999                                                                                                                                                }
     ,    
     {        
-        999,999,999,999,999,999,999,999                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                 }
     ,    
     {   
-        999,999,999,999,999,999,999,999                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                 }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                 }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                 }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                 }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                 }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                 }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                 }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                 }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                 }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                 }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                 }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                 }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                 }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                }
+        999,999,999,999,999,999,999,999                                                                                                                                                }
     ,    
 };
 
 
 
 
-Bounce resetCV = Bounce( RESET_CV, 20 ); 
-Bounce resetSwitch = Bounce( RESET_BUTTON, 20 ); // Bounce setup for Reset
+Bounce resetCV = Bounce( RESET_CV, 5 ); 
 boolean resetButton = false;
 File root;
 File settingsFile;
@@ -116,11 +115,16 @@ int rootQuantOld;
 boolean changed = true;
 
 boolean ResetCV;
-boolean ASR = false; 
+boolean ASR = true; 
 int ASRstep; 
-elapsedMillis updateTime;
-elapsedMillis waveChange; 
+elapsedMillis resetHold;
+elapsedMillis resetFlash; 
 int updateCount = 0;
+
+elapsedMillis elapsed1 = 0;
+elapsedMillis lockOut = 0;
+boolean shortPress = false;
+boolean longPress = false;
 
 // GUItool: begin automatically generated code
 AudioSynthWaveform       waveform1;      //xy=215,232
@@ -170,10 +174,13 @@ void setup(){
     SPI.setSCK(14);
 
 
-    // Read waveform setting from EEPROM position 1234 
-    waveform = EEPROM.read(1234);
+    // Read waveform and ASR settings from EEPROM 
+    ASR = EEPROM.read(1233);
+    waveform = EEPROM.read(1234)-1;
     ledWrite(waveform);
     changed = true;
+
+
 
 
     // OPEN SD CARD 
@@ -225,6 +232,9 @@ void setup(){
     envelope1.decay(1);
     envelope1.sustain(1.0);
     envelope1.release(2);
+    envelope1.noteOn();
+
+
 }
 
 
@@ -236,10 +246,7 @@ void loop(){
     if (ASR){
 
         if (ResetCV == 1){
-            int ASRVoices = 4;
-            Serial.println("inside asr loop");
-            //    result = startChosen + notesSD[chordChosen][ASRstep];
-            
+            int ASRVoices = map(chordRaw,0,1024,1,9);
             FREQ[ASRstep] =  numToFreq(rootQuant);
             AMP[ASRstep] = 0.95/ASRVoices;
             ASRstep++;
@@ -250,17 +257,8 @@ void loop(){
                 AMP[i] = 0;    
             }
 
-        updateSines();
-
-            Serial.print(" 0:");
-            Serial.print(FREQ[0]);
-            Serial.print(" 1:");
-            Serial.print(FREQ[1]);
-            Serial.print(" 2:");
-            Serial.print(FREQ[2]);
-            Serial.print(" 3:");
-            Serial.println(FREQ[3]);
-
+            updateSines();
+            ResetCV = 0;
         }   
     }
     else if (!ASR && changed) {
@@ -274,29 +272,41 @@ void loop(){
                 voiceCount++;
             }
         }
+        Serial.print("voice count=");
+        Serial.println(voiceCount);
         for (int i = 0; i< SINECOUNT; i++){
-            if (notesSD[int(chordQuant)][i] != 999) {
+            if (notesSD[chordQuant][i] != 999) {
                 AMP[i] = 1.0/voiceCount;
                 voiceTotal += 1.0/voiceCount;
             }
             else{
-                AMP[i] = 0;   
+                AMP[i] = 0.0;   
             }
         }
 
     }
 
 
-    if (resetButton && waveChange > 250){
+    // CHECK BUTTON STATUS 
+
+    resetHold = resetHold * resetButton;
+
+    if (longPress){
+        ASR = !ASR;
+        longPress = false;
+        EEPROM.write(1233,ASR);
+    }
+
+    if (shortPress){
         waveform++;
         waveform = waveform % 4;
         ledWrite(waveform);
         changed = true;
-        waveChange = 0;
         EEPROM.write(1234, waveform);
-
+        shortPress = false;
 
     }
+
     if (changed && !ASR)  {
         updateSines();
         changed = false;
@@ -337,7 +347,7 @@ void updateSines(){
     AudioInterrupts();
     envelope1.noteOn();
     delay(3);
-
+    printPlaying();
 
 }
 
@@ -406,12 +416,32 @@ void checkInterface(){
         rootQuantOld = rootQuant;  
     }
 
-    resetSwitch.update();
-    resetButton = resetSwitch.read();
+    //    resetSwitch.update();
+    //    resetButton = resetSwitch.read();
+
+
+
+    int buttonState = digitalRead(RESET_BUTTON);
+    if (elapsed1 > 10 && buttonState == 0 && lockOut > 499 ){
+        shortPress = true;    
+    }
+    elapsed1 = elapsed1 * buttonState; 
+    if (elapsed1 > 500){
+        longPress = true;
+        lockOut = 0;
+        elapsed1 = 0;
+    }
+
+
+
+
 
     resetCV.update();
     ResetCV = resetCV.rose();
-    digitalWrite(RESET_LED, ResetCV);
+    if (ResetCV) resetFlash = 0; 
+
+
+    digitalWrite(RESET_LED, (ASR - (resetFlash<20)));
 
 
 }
@@ -499,22 +529,22 @@ void writeSDSettings() {
     settingsFile.println("Anything outside the square brackets is ignored");
     settingsFile.println("");
 
-    settingsFile.println("1  [0,4,7,12]");
-    settingsFile.println("2  [0,3,7,12]");
-    settingsFile.println("3  [0,3,7,11]");
-    settingsFile.println("4  [0,4,5,7]");
-    settingsFile.println("5  [0,4,7,14]");
-    settingsFile.println("6  [0,2,4,7]");
-    settingsFile.println("7  [0,3,6,9]");
-    settingsFile.println("8  [0,7,12]");
-    settingsFile.println("9  [0,4,7,11]");
-    settingsFile.println("10 [0,3,7,10]");
-    settingsFile.println("11 [0,3,7,9]");
-    settingsFile.println("12 [0,4,6,10]");
-    settingsFile.println("13 [0,5,7,10]");
-    settingsFile.println("14 [0,4,7,9]");
-    settingsFile.println("15 [0,4,7,9]");
-    settingsFile.println("16 [-36,-24,-12,0,12,24,36,48]");
+    settingsFile.println("1  [0,4,7,12] Major");
+    settingsFile.println("2  [0,3,7,12] Minor");
+    settingsFile.println("3  [0,4,7,11] Major 7th");
+    settingsFile.println("4  [0,3,7,10] Minor 7th");
+    settingsFile.println("5  [0,4,7,11,14] Major 9th");
+    settingsFile.println("6  [0,3,7,10,14] Minor 9th");
+    settingsFile.println("7  [0,5,7] Suspended 4th");
+    settingsFile.println("8  [0,7,12] Power 5th");
+    settingsFile.println("9  [0,5,12] Power 4th");
+    settingsFile.println("10 [0,4,7,8] Major 6th");
+    settingsFile.println("11 [0,3,7,8] Minor 6th");
+    settingsFile.println("12 [0,3,6] Diminished");
+    settingsFile.println("13 [0,4,8] Augmented");
+    settingsFile.println("14 [0] Root");
+    settingsFile.println("15 [-12,0] Sub Octave");
+    settingsFile.println("16 [-12,0,12,24] 2 up 1 down octaves");
 
     //
 
@@ -530,6 +560,28 @@ void reBoot(int delayTime){
         delay (delayTime);
     WRITE_RESTART(0x5FA0004);
 }
+
+void printPlaying(){
+    Serial.print("Chord: ");
+    Serial.print(chordQuant);
+    Serial.print(" Root: ");
+    Serial.print(rootQuant);
+    Serial.print(" ");
+    for(int i = 0; i<SINECOUNT; i++){
+
+        Serial.print(i);
+        Serial.print(": ");
+        Serial.print (FREQ[i]);
+        Serial.print(" ");
+        Serial.print(AMP[i]);
+        Serial.print (" | ");
+
+    }
+    Serial.println("--");
+
+}
+
+
 
 
 
