@@ -17,23 +17,24 @@ AudioConnection          patchCord1(waveform1, dac1);
 // GUItool: end automatically generated code
 
 void setup(){
+ Serial.begin(9600);
     AudioMemory(50);
     waveform1.pulseWidth(0.5);
-    waveform1.begin(0.9, 220, WAVEFORM_SINE);
+    waveform1.begin(0.8, 220, WAVEFORM_SINE);
 }
 
 
 
 
 void loop(){
-//    waveform1.begin(0.9, 220, WAVEFORM_SINE);
-//    delay(2000);
-    waveform1.begin(0.9, 220, WAVEFORM_SQUARE);
-//    delay(2000);
-//    waveform1.begin(0.9, 220, WAVEFORM_SAWTOOTH);
-//    delay(2000);
-//    waveform1.begin(0.9, 220, WAVEFORM_PULSE);
-//    delay(2000);
+   waveform1.begin(0.7, 220, WAVEFORM_SINE);
+    delay(2000);
+    waveform1.begin(0.7, 220, WAVEFORM_SQUARE);
+   delay(2000);
+    waveform1.begin(0.7, 220, WAVEFORM_SAWTOOTH);
+    delay(2000);
+    waveform1.begin(0.7, 220, WAVEFORM_PULSE);
+    delay(2000);
 
 
 
