@@ -243,9 +243,8 @@ void loop(){
 
     int result;
 
-    if (ASR){
+    if (ASR && changed) {
 
-        if (ResetCV == 1){
             int ASRVoices = map(chordRaw,0,1024,1,9);
             FREQ[ASRstep] =  numToFreq(rootQuant);
             AMP[ASRstep] = 0.95/ASRVoices;
@@ -257,9 +256,6 @@ void loop(){
                 AMP[i] = 0;    
             }
 
-            updateSines();
-            ResetCV = 0;
-        }   
     }
     else if (!ASR && changed) {
 
@@ -307,7 +303,7 @@ void loop(){
 
     }
 
-    if (changed && !ASR)  {
+    if (changed)  {
         updateSines();
         changed = false;
 
