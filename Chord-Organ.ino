@@ -29,52 +29,52 @@
 // Initialise Array with 999s, to identify unfilled elements when reading from SD card 
 int notesSD[16][8] = {
     {        
-        999,999,999,999,999,999,999,999                                                                                                                                                }
+        999,999,999,999,999,999,999,999                                                                                                                                                        }
     ,    
     {        
-        999,999,999,999,999,999,999,999                                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                         }
     ,    
     {   
-        999,999,999,999,999,999,999,999                                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                                 }
+        999,999,999,999,999,999,999,999                                                                                                                                                         }
     ,    
     {
-        999,999,999,999,999,999,999,999                                                                                                                                                }
+        999,999,999,999,999,999,999,999                                                                                                                                                        }
     ,    
 };
 
@@ -125,6 +125,9 @@ elapsedMillis elapsed1 = 0;
 elapsedMillis lockOut = 0;
 boolean shortPress = false;
 boolean longPress = false;
+elapsedMillis pulseOut = 0;
+int flashTime = 10;
+boolean flashing = false;
 
 // GUItool: begin automatically generated code
 AudioSynthWaveform       waveform1;      //xy=215,232
@@ -158,7 +161,7 @@ AudioConnection          patchCord12(envelope1, dac1);
 void setup(){
     pinMode(BANK_BUTTON,INPUT);
     pinMode(RESET_BUTTON, INPUT);
-    pinMode(RESET_CV, INPUT);
+    pinMode(RESET_CV, INPUT); 
     pinMode(RESET_LED, OUTPUT);
     pinMode(LED0,OUTPUT);
     pinMode(LED1,OUTPUT);
@@ -245,17 +248,30 @@ void loop(){
 
     if (ASR && changed) {
 
-            int ASRVoices = map(chordRaw,0,1024,1,9);
-            FREQ[ASRstep] =  numToFreq(rootQuant);
-            AMP[ASRstep] = 0.95/ASRVoices;
-            ASRstep++;
+        int ASRVoices = map(chordRaw,0,1024,1,9);
+        FREQ[ASRstep] =  numToFreq(rootQuant);
+        AMP[ASRstep] = 0.95/ASRVoices;
+        ASRstep++;
 
-            ASRstep = ASRstep % ASRVoices;
+        ASRstep = ASRstep % ASRVoices;
 
-            for (int i = ASRVoices; i < SINECOUNT; i++){
-                AMP[i] = 0;    
-            }
+        for (int i = ASRVoices; i < SINECOUNT; i++){
+            AMP[i] = 0;    
+        }
+    }
+    else if (ASR && ResetCV) {
+        int ASRVoices = map(chordRaw,0,1024,1,9);
+        FREQ[ASRstep] =  numToFreq(rootQuant);
+        AMP[ASRstep] = 0.95/ASRVoices;
+        ASRstep++;
 
+        ASRstep = ASRstep % ASRVoices;
+
+        for (int i = ASRVoices; i < SINECOUNT; i++){
+            AMP[i] = 0;    
+        }
+updateSines();        
+        
     }
     else if (!ASR && changed) {
 
@@ -291,6 +307,7 @@ void loop(){
         ASR = !ASR;
         longPress = false;
         EEPROM.write(1233,ASR);
+        digitalWrite (RESET_LED, ASR);
     }
 
     if (shortPress){
@@ -304,10 +321,28 @@ void loop(){
     }
 
     if (changed)  {
+        pulseOut = 0;
+        flashing = true;
+        pinMode(RESET_CV, OUTPUT);
+        digitalWrite (RESET_LED, ASR-HIGH);
+        digitalWrite (RESET_CV, HIGH);
+
+
         updateSines();
         changed = false;
 
+
+
+
     }
+
+    if (pulseOut > flashTime && flashing == true){
+        digitalWrite (RESET_LED, ASR-LOW);
+        digitalWrite (RESET_CV, LOW);
+        pinMode(RESET_CV, INPUT);
+        flashing = false;  
+    } 
+
 }
 
 
@@ -431,14 +466,14 @@ void checkInterface(){
 
 
 
+    if (!flashing){
+        resetCV.update();
+        ResetCV = resetCV.rose();
+        if (ResetCV) resetFlash = 0; 
 
-    resetCV.update();
-    ResetCV = resetCV.rose();
-    if (ResetCV) resetFlash = 0; 
 
-
-    digitalWrite(RESET_LED, (ASR - (resetFlash<20)));
-
+        digitalWrite(RESET_LED, (ASR - (resetFlash<20)));
+    }
 
 }
 
@@ -576,6 +611,8 @@ void printPlaying(){
     Serial.println("--");
 
 }
+
+
 
 
 
