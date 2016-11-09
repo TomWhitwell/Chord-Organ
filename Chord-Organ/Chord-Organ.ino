@@ -6,6 +6,7 @@
 #include <SerialFlash.h>
 #include <EEPROM.h>
 
+#define SMOOTHSTEP(x) ((x) * (x) * (3 - 2 * (x))) //SMOOTHSTEP expression.
 
 #define CHORD_POT_PIN 9 // pin for Channel pot
 #define CHORD_CV_PIN 6 // pin for Channel CV 
@@ -115,8 +116,6 @@ int rootQuantOld;
 boolean changed = true;
 
 boolean ResetCV;
-boolean ASR = true; 
-int ASRstep; 
 elapsedMillis resetHold;
 elapsedMillis resetFlash; 
 int updateCount = 0;
@@ -177,8 +176,7 @@ void setup(){
     SPI.setSCK(14);
 
 
-    // Read waveform and ASR settings from EEPROM 
-    ASR = EEPROM.read(1233);
+    // Read waveform settings from EEPROM 
     waveform = EEPROM.read(1234)-1;
     ledWrite(waveform);
     changed = true;
@@ -236,7 +234,14 @@ void setup(){
     envelope1.sustain(1.0);
     envelope1.release(2);
     envelope1.noteOn();
-
+    waveform1.begin(1.0,FREQ[0],wave_type[waveform]);
+    waveform2.begin(1.0,FREQ[1],wave_type[waveform]);
+    waveform3.begin(1.0,FREQ[2],wave_type[waveform]);
+    waveform4.begin(1.0,FREQ[3],wave_type[waveform]);
+    waveform5.begin(1.0,FREQ[4],wave_type[waveform]);
+    waveform6.begin(1.0,FREQ[5],wave_type[waveform]);
+    waveform7.begin(1.0,FREQ[6],wave_type[waveform]);
+    waveform8.begin(1.0,FREQ[7],wave_type[waveform]); 
 
 }
 
@@ -246,34 +251,8 @@ void loop(){
 
     int result;
 
-    if (ASR && changed) {
 
-        int ASRVoices = map(chordRaw,0,1024,1,9);
-        FREQ[ASRstep] =  numToFreq(rootQuant);
-        AMP[ASRstep] = 0.95/ASRVoices;
-        ASRstep++;
-
-        ASRstep = ASRstep % ASRVoices;
-
-        for (int i = ASRVoices; i < SINECOUNT; i++){
-            AMP[i] = 0;    
-        }
-    }
-    else if (ASR && ResetCV) {
-        int ASRVoices = map(chordRaw,0,1024,1,9);
-        FREQ[ASRstep] =  numToFreq(rootQuant);
-        AMP[ASRstep] = 0.95/ASRVoices;
-        ASRstep++;
-
-        ASRstep = ASRstep % ASRVoices;
-
-        for (int i = ASRVoices; i < SINECOUNT; i++){
-            AMP[i] = 0;    
-        }
-updateSines();        
-        
-    }
-    else if (!ASR && changed) {
+     if (changed) {
 
         float voiceCount = 0;
         float voiceTotal = 0;
@@ -303,12 +282,6 @@ updateSines();
 
     resetHold = resetHold * resetButton;
 
-    if (longPress){
-        ASR = !ASR;
-        longPress = false;
-        EEPROM.write(1233,ASR);
-        digitalWrite (RESET_LED, ASR);
-    }
 
     if (shortPress){
         waveform++;
@@ -317,6 +290,18 @@ updateSines();
         changed = true;
         EEPROM.write(1234, waveform);
         shortPress = false;
+    AudioNoInterrupts();  
+    waveform1.begin(1.0,FREQ[0],wave_type[waveform]);
+    waveform2.begin(1.0,FREQ[1],wave_type[waveform]);
+    waveform3.begin(1.0,FREQ[2],wave_type[waveform]);
+    waveform4.begin(1.0,FREQ[3],wave_type[waveform]);
+    waveform5.begin(1.0,FREQ[4],wave_type[waveform]);
+    waveform6.begin(1.0,FREQ[5],wave_type[waveform]);
+    waveform7.begin(1.0,FREQ[6],wave_type[waveform]);
+    waveform8.begin(1.0,FREQ[7],wave_type[waveform]); 
+    AudioInterrupts();
+
+        
 
     }
 
@@ -324,20 +309,17 @@ updateSines();
         pulseOut = 0;
         flashing = true;
         pinMode(RESET_CV, OUTPUT);
-        digitalWrite (RESET_LED, ASR-HIGH);
+        digitalWrite (RESET_LED, HIGH);
         digitalWrite (RESET_CV, HIGH);
 
-
         updateSines();
+
         changed = false;
-
-
-
-
     }
 
+
     if (pulseOut > flashTime && flashing == true){
-        digitalWrite (RESET_LED, ASR-LOW);
+        digitalWrite (RESET_LED, LOW);
         digitalWrite (RESET_CV, LOW);
         pinMode(RESET_CV, INPUT);
         flashing = false;  
@@ -350,19 +332,41 @@ updateSines();
 
 
 void updateSines(){
-    Serial.println("changing");
-    envelope1.noteOff();
-    delay(3);
+//    Serial.println("changing");
+//    envelope1.noteOff();
+//    delay(3);
 
     AudioNoInterrupts();  
-    waveform1.begin(1.0,FREQ[0],wave_type[waveform]);
-    waveform2.begin(1.0,FREQ[1],wave_type[waveform]);
-    waveform3.begin(1.0,FREQ[2],wave_type[waveform]);
-    waveform4.begin(1.0,FREQ[3],wave_type[waveform]);
-    waveform5.begin(1.0,FREQ[4],wave_type[waveform]);
-    waveform6.begin(1.0,FREQ[5],wave_type[waveform]);
-    waveform7.begin(1.0,FREQ[6],wave_type[waveform]);
-    waveform8.begin(1.0,FREQ[7],wave_type[waveform]); 
+
+    waveform1.frequency(FREQ[0]);
+    waveform2.frequency(FREQ[1]);
+    waveform3.frequency(FREQ[2]);
+    waveform4.frequency(FREQ[3]);
+    waveform5.frequency(FREQ[4]);
+    waveform6.frequency(FREQ[5]);
+    waveform7.frequency(FREQ[6]);
+    waveform7.frequency(FREQ[7]);
+
+    
+//    waveform2.begin(1.0,FREQ[1],wave_type[waveform]);
+//    waveform3.begin(1.0,FREQ[2],wave_type[waveform]);
+//    waveform4.begin(1.0,FREQ[3],wave_type[waveform]);
+//    waveform5.begin(1.0,FREQ[4],wave_type[waveform]);
+//    waveform6.begin(1.0,FREQ[5],wave_type[waveform]);
+//    waveform7.begin(1.0,FREQ[6],wave_type[waveform]);
+//    waveform8.begin(1.0,FREQ[7],wave_type[waveform]); 
+
+    
+    
+    
+//    waveform1.begin(1.0,FREQ[0],wave_type[waveform]);
+//    waveform2.begin(1.0,FREQ[1],wave_type[waveform]);
+//    waveform3.begin(1.0,FREQ[2],wave_type[waveform]);
+//    waveform4.begin(1.0,FREQ[3],wave_type[waveform]);
+//    waveform5.begin(1.0,FREQ[4],wave_type[waveform]);
+//    waveform6.begin(1.0,FREQ[5],wave_type[waveform]);
+//    waveform7.begin(1.0,FREQ[6],wave_type[waveform]);
+//    waveform8.begin(1.0,FREQ[7],wave_type[waveform]); 
 
     mixer1.gain(0,AMP[0]);
     mixer1.gain(1,AMP[1]);
@@ -376,9 +380,9 @@ void updateSines(){
 
 
     AudioInterrupts();
-    envelope1.noteOn();
-    delay(3);
-    printPlaying();
+//    envelope1.noteOn();
+//    delay(3);
+//    printPlaying();
 
 }
 
@@ -472,7 +476,7 @@ void checkInterface(){
         if (ResetCV) resetFlash = 0; 
 
 
-        digitalWrite(RESET_LED, (ASR - (resetFlash<20)));
+        digitalWrite(RESET_LED, (resetFlash<20));
     }
 
 }
