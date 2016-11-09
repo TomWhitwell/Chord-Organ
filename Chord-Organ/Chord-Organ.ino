@@ -115,8 +115,6 @@ int rootQuantOld;
 boolean changed = true;
 
 boolean ResetCV;
-boolean ASR = true; 
-int ASRstep; 
 elapsedMillis resetHold;
 elapsedMillis resetFlash; 
 int updateCount = 0;
@@ -177,8 +175,7 @@ void setup(){
     SPI.setSCK(14);
 
 
-    // Read waveform and ASR settings from EEPROM 
-    ASR = EEPROM.read(1233);
+    // Read waveform settings from EEPROM 
     waveform = EEPROM.read(1234)-1;
     ledWrite(waveform);
     changed = true;
@@ -246,34 +243,8 @@ void loop(){
 
     int result;
 
-    if (ASR && changed) {
 
-        int ASRVoices = map(chordRaw,0,1024,1,9);
-        FREQ[ASRstep] =  numToFreq(rootQuant);
-        AMP[ASRstep] = 0.95/ASRVoices;
-        ASRstep++;
-
-        ASRstep = ASRstep % ASRVoices;
-
-        for (int i = ASRVoices; i < SINECOUNT; i++){
-            AMP[i] = 0;    
-        }
-    }
-    else if (ASR && ResetCV) {
-        int ASRVoices = map(chordRaw,0,1024,1,9);
-        FREQ[ASRstep] =  numToFreq(rootQuant);
-        AMP[ASRstep] = 0.95/ASRVoices;
-        ASRstep++;
-
-        ASRstep = ASRstep % ASRVoices;
-
-        for (int i = ASRVoices; i < SINECOUNT; i++){
-            AMP[i] = 0;    
-        }
-updateSines();        
-        
-    }
-    else if (!ASR && changed) {
+     if (changed) {
 
         float voiceCount = 0;
         float voiceTotal = 0;
@@ -303,12 +274,6 @@ updateSines();
 
     resetHold = resetHold * resetButton;
 
-    if (longPress){
-        ASR = !ASR;
-        longPress = false;
-        EEPROM.write(1233,ASR);
-        digitalWrite (RESET_LED, ASR);
-    }
 
     if (shortPress){
         waveform++;
@@ -324,7 +289,7 @@ updateSines();
         pulseOut = 0;
         flashing = true;
         pinMode(RESET_CV, OUTPUT);
-        digitalWrite (RESET_LED, ASR-HIGH);
+        digitalWrite (RESET_LED, HIGH);
         digitalWrite (RESET_CV, HIGH);
 
 
@@ -337,7 +302,7 @@ updateSines();
     }
 
     if (pulseOut > flashTime && flashing == true){
-        digitalWrite (RESET_LED, ASR-LOW);
+        digitalWrite (RESET_LED, LOW);
         digitalWrite (RESET_CV, LOW);
         pinMode(RESET_CV, INPUT);
         flashing = false;  
@@ -472,7 +437,7 @@ void checkInterface(){
         if (ResetCV) resetFlash = 0; 
 
 
-        digitalWrite(RESET_LED, (ASR - (resetFlash<20)));
+        digitalWrite(RESET_LED, (resetFlash<20));
     }
 
 }
