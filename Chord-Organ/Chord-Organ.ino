@@ -286,7 +286,7 @@ void setup() {
 }
 
 
-float N = 2000.0; // NUMBER OF STEPS for glide
+float N = 400.0; // NUMBER OF STEPS for glide
 int count  = 0;
 float v;
 float x;
