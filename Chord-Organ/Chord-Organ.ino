@@ -542,22 +542,22 @@ void writeSDSettings() {
     settingsFile.println("the same number of notes.");
     settingsFile.println("");
 
-    settingsFile.println("1  [0,4,7,12] Major");
-    settingsFile.println("2  [0,3,7,12] Minor");
-    settingsFile.println("3  [0,4,7,11] Major 7th");
-    settingsFile.println("4  [0,3,7,10] Minor 7th");
+    settingsFile.println("1  [0,4,7,12,0] Major");
+    settingsFile.println("2  [0,3,7,12,0] Minor");
+    settingsFile.println("3  [0,4,7,11,0] Major 7th");
+    settingsFile.println("4  [0,3,7,10,0] Minor 7th");
     settingsFile.println("5  [0,4,7,11,14] Major 9th");
     settingsFile.println("6  [0,3,7,10,14] Minor 9th");
-    settingsFile.println("7  [0,5,7] Suspended 4th");
-    settingsFile.println("8  [0,7,12] Power 5th");
-    settingsFile.println("9  [0,5,12] Power 4th");
-    settingsFile.println("10 [0,4,7,8] Major 6th");
-    settingsFile.println("11 [0,3,7,8] Minor 6th");
-    settingsFile.println("12 [0,3,6] Diminished");
-    settingsFile.println("13 [0,4,8] Augmented");
-    settingsFile.println("14 [0] Root");
-    settingsFile.println("15 [-12,0] Sub Octave");
-    settingsFile.println("16 [-12,0,12,24] 2 up 1 down octaves");
+    settingsFile.println("7  [0,5,7,12,0] Suspended 4th");
+    settingsFile.println("8  [0,7,12,0,7] Power 5th");
+    settingsFile.println("9  [0,5,12,0,5] Power 4th");
+    settingsFile.println("10 [0,4,7,8,0] Major 6th");
+    settingsFile.println("11 [0,3,7,8,0] Minor 6th");
+    settingsFile.println("12 [0,3,6,0,3] Diminished");
+    settingsFile.println("13 [0,4,8,0,4] Augmented");
+    settingsFile.println("14 [0,0,0,0,0] Root");
+    settingsFile.println("15 [-12,-12,0,0,0] Sub Octave");
+    settingsFile.println("16 [-12,0,0,12,24] 2 up 1 down octaves");
 
     //
 
