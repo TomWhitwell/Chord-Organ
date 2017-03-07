@@ -486,6 +486,9 @@ void readSDSettings(){
             entry++;
             note = 0;
             inBracket = false;
+            if(entry == 16) {
+            	break;
+            }
         }
 
         else if (inBracket && character != '[' && character != ',' && character != ']'){
@@ -493,6 +496,7 @@ void readSDSettings(){
         }
 
     }   
+    chordCount = entry;
     settingsFile.close();
 }
 
