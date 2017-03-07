@@ -352,7 +352,7 @@ void updateSines(){
     waveform5.frequency(FREQ[4]);
     waveform6.frequency(FREQ[5]);
     waveform7.frequency(FREQ[6]);
-    waveform7.frequency(FREQ[7]);
+    waveform8.frequency(FREQ[7]);
 
 
     AudioInterrupts();
