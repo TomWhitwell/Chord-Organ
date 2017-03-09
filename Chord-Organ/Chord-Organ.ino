@@ -6,6 +6,8 @@
 #include <SerialFlash.h>
 #include <EEPROM.h>
 
+#define DEBUG_MODE
+
 #define CHORD_POT_PIN 9 // pin for Channel pot
 #define CHORD_CV_PIN 6 // pin for Channel CV 
 #define ROOT_POT_PIN 7 // pin for Time pot
@@ -23,7 +25,13 @@
 #define RESTART_ADDR       0xE000ED0C
 #define READ_RESTART()     (*(volatile uint32_t *)RESTART_ADDR)
 #define WRITE_RESTART(val) ((*(volatile uint32_t *)RESTART_ADDR) = (val))
+
+#define ADC_BITS 13
+#define ADC_MAX_VAL 8192
+
 #define SINECOUNT 8
+#define LOW_NOTE 36
+#define CHECK_CPU false
 
 // Initialise Array with 999s, to identify unfilled elements when reading from SD card 
 int notesSD[16][8] = {
@@ -83,6 +91,7 @@ boolean resetButton = false;
 File root;
 File settingsFile;
 int chordCount = 16;
+
 short wave_type[4] = {
     WAVEFORM_SINE,
     WAVEFORM_SQUARE,
@@ -90,27 +99,33 @@ short wave_type[4] = {
     WAVEFORM_PULSE,
 };
 int waveform = 0; 
+
 float FREQ[SINECOUNT] = {
     55,110, 220, 440, 880,1760,3520,7040};
 float AMP[SINECOUNT] = { 
     0.9, 0.9, 0.9, 0.9,0.9, 0.9, 0.9, 0.9};
-//int startNote; 
-//int chordPick; 
-//float startChosen;
-//float chordChosen;
-//float startOld;
-//float chordOld;
+// Volume for a single voice for each chord size
+float AMP_PER_VOICE[SINECOUNT] = {
+  0.4,0.3,0.22,0.2,0.15,0.15,0.13,0.12};
 
 int chordRaw;
 int chordRawOld;
 int chordQuant;
 int chordQuantOld;
-int rootRaw;
-int rootRawOld;
+
+int rootPotOld;
+int rootCVOld;
+
 int rootQuant;
 int rootQuantOld;
-boolean changed = true;
 
+float rootMapCoeff;
+
+// Root CV Pin readings below this level are clamped to LOW_NOTE
+int rootClampLow;
+
+boolean changed = true;
+boolean rootChanged = false;
 boolean ResetCV;
 elapsedMillis resetHold;
 elapsedMillis resetFlash; 
@@ -163,11 +178,13 @@ void setup(){
     pinMode(LED2,OUTPUT);
     pinMode(LED3,OUTPUT);
     AudioMemory(50);
+    analogReadRes(ADC_BITS);
+    
+#ifdef DEBUG_MODE
+  while( !Serial );
+#endif // DEBUG_MODE
 
-    //    delay(2000);
-    //    Serial.begin(9600);
-
-    Serial.println("starting");
+    Serial.println("Starting");
     ledWrite(waveform);
 
     // SD CARD SETTINGS FOR MODULE 
@@ -198,6 +215,10 @@ void setup(){
         readSDSettings();
     }
     else { 
+      
+#ifdef DEBUG_MODE
+        Serial.println("Settings file not found, writing new settings");
+#endif
         writeSDSettings();
         readSDSettings();
     };
@@ -238,6 +259,18 @@ void setup(){
     waveform7.begin(1.0,FREQ[6],wave_type[waveform]);
     waveform8.begin(1.0,FREQ[7],wave_type[waveform]); 
 
+    // TODO : Check if this is in the config and use that    
+    int noteRange = 38;
+
+    // This makes the CV input range for the low note half the size of the other notes.
+    rootClampLow = ((float)ADC_MAX_VAL / noteRange) * 0.5;
+    // Now map the rest of the range linearly across the input range
+    rootMapCoeff = (float)noteRange / (ADC_MAX_VAL - rootClampLow);
+
+    Serial.print("Root Clamp Low ");
+    Serial.println(rootClampLow);
+    Serial.print("Root Map Coeff ");
+    Serial.println(rootMapCoeff);
 }
 
 
@@ -249,27 +282,35 @@ void loop(){
 
     if (changed) {
 
-        float voiceCount = 0;
+        int voiceCount = 0;
         float voiceTotal = 0;
         for(int i = 0; i< SINECOUNT; i++){
             if (notesSD[chordQuant][i] != 999) {
                 result = rootQuant + notesSD[chordQuant][i];
-                FREQ[i] =  numToFreq(result);
+                float freq = numToFreq(result);
+                FREQ[i] = freq;
                 voiceCount++;
             }
         }
-        Serial.print("voice count=");
-        Serial.println(voiceCount);
+        float ampPerVoice = AMP_PER_VOICE[voiceCount-1];
+//        Serial.print("Amp ");
+//        Serial.println(ampPerVoice);
+
         for (int i = 0; i< SINECOUNT; i++){
             if (notesSD[chordQuant][i] != 999) {
-                AMP[i] = 1.0/voiceCount;
-                voiceTotal += 1.0/voiceCount;
+                AMP[i] = ampPerVoice;
+                voiceTotal += ampPerVoice;
             }
             else{
                 AMP[i] = 0.0;   
             }
         }
 
+        if(CHECK_CPU) {
+            int maxCPU = AudioProcessorUsageMax();
+            Serial.print("MaxCPU=");
+            Serial.println(maxCPU);            
+        }
     }
 
 
@@ -295,9 +336,6 @@ void loop(){
         waveform7.begin(1.0,FREQ[6],wave_type[waveform]);
         waveform8.begin(1.0,FREQ[7],wave_type[waveform]); 
         AudioInterrupts();
-
-
-
     }
 
     if (changed)  {
@@ -319,12 +357,7 @@ void loop(){
         pinMode(RESET_CV, INPUT);
         flashing = false;  
     } 
-
 }
-
-
-
-
 
 void updateSines(){
     //    Serial.println("changing");
@@ -332,9 +365,6 @@ void updateSines(){
     //    delay(1);
 
     AudioNoInterrupts();  
-
-
-
 
     mixer1.gain(0,AMP[0]);
     mixer1.gain(1,AMP[1]);
@@ -353,7 +383,6 @@ void updateSines(){
     waveform6.frequency(FREQ[5]);
     waveform7.frequency(FREQ[6]);
     waveform8.frequency(FREQ[7]);
-
 
     AudioInterrupts();
     //    envelope1.noteOn();
@@ -388,10 +417,12 @@ void checkInterface(){
 
     // Copy pots and CVs to new value 
     chordRaw = chordPot + chordCV; 
-    chordRaw = constrain(chordRaw, 0, 1023);
-    rootRaw = rootPot + rootCV;   
-    rootRaw = constrain(rootRaw, 0U, 1023U); 
+    chordRaw = constrain(chordRaw, 0, ADC_MAX_VAL - 1);
 
+    rootPot = constrain(rootPot, 0, ADC_MAX_VAL - 1);
+    rootCV = constrain(rootCV, 0, ADC_MAX_VAL - 1);
+
+    rootChanged = false;
     // Apply hysteresis and filtering to prevent jittery quantization 
     // Thanks to Matthias Puech for this code 
 
@@ -403,34 +434,49 @@ void checkInterface(){
         chordRaw = chordRawOld;  
     }
 
-
-
-    if ((rootRaw > rootRawOld + 16) || (rootRaw < rootRawOld - 16)){
-        rootRawOld = rootRaw;    
+    // Do Pot and CV separately
+    if ((rootPot > rootPotOld + 16) || (rootPot < rootPotOld - 16)){
+        rootPotOld = rootPot;
+        rootChanged = true;
     }
     else {
-        rootRawOld += (rootRaw - rootRawOld) >>5; 
-        rootRaw = rootRawOld;  
+        rootPotOld += (rootPot - rootPotOld) >>5;
+        rootPot = rootPotOld;
+    }
+    if ((rootCV > rootCVOld + 16) || (rootCV < rootCVOld - 16)){
+        rootCVOld = rootCV;
+        rootChanged = true;
+    }
+    else {
+        rootCVOld += (rootCV - rootCVOld) >>5;
+        rootCV = rootCVOld;
     }
 
-
-
-    chordQuant = map(chordRaw, 0, 1024, 0, chordCount);
+    chordQuant = map(chordRaw, 0, ADC_MAX_VAL, 0, chordCount);
     if (chordQuant != chordQuantOld){
         changed = true; 
         chordQuantOld = chordQuant;    
     }
 
-    rootQuant = map(rootRaw,0,1024,36,84); // Range = C-2 (36) to C+2 (84)
+    // Map ADC reading to Note Numbers
+    int rootCVQuant = LOW_NOTE;
+    if(rootCV > rootClampLow) {
+      rootCVQuant = ((rootCV - rootClampLow) * rootMapCoeff) + LOW_NOTE + 1;
+    }
+    // Use Pot as transpose for CV
+    int rootPotQuant = map(rootPot,0,ADC_MAX_VAL,0,48);
+    rootQuant = rootCVQuant + rootPotQuant;
     if (rootQuant != rootQuantOld){
         changed = true; 
         rootQuantOld = rootQuant;  
     }
 
+   if(rootChanged) {
+        // printRootInfo(rootPot,rootCV);
+   }
+
     //    resetSwitch.update();
     //    resetButton = resetSwitch.read();
-
-
 
     int buttonState = digitalRead(RESET_BUTTON);
     if (elapsed1 > 10 && buttonState == 0 && lockOut > 999 ){
@@ -443,14 +489,10 @@ void checkInterface(){
         elapsed1 = 0;
     }
 
-
-
-
     if (!flashing){
         resetCV.update();
         ResetCV = resetCV.rose();
         if (ResetCV) resetFlash = 0; 
-
 
         digitalWrite(RESET_LED, (resetFlash<20));
     }
@@ -474,30 +516,37 @@ void readSDSettings(){
         if (character == '[') {
             inBracket = true; 
         }
+
         if (character == ','  && inBracket){
+            Serial.print("Note ");
+            Serial.println(settingValue.toInt());
             notesSD[entry][note] = settingValue.toInt();
             settingValue = "";   
             note++;
         }
 
         if (character == ']'  && inBracket) {
+            Serial.print("Note ");
+            Serial.println(settingValue.toInt());
             notesSD[entry][note] = settingValue.toInt();
             settingValue = "";
             entry++;
             note = 0;
             inBracket = false;
-            if(entry == 16) {
-            	break;
-            }
         }
 
         else if (inBracket && character != '[' && character != ',' && character != ']'){
             settingValue += character; 
         }
 
+        if(entry == 16) {
+          break;
+        }
     }   
-    chordCount = entry;
     settingsFile.close();
+
+    // Update chordCount so that the mapping of Chord Knob / Chord CV covers the range available
+    chordCount = entry;
 }
 
 
@@ -564,8 +613,6 @@ void writeSDSettings() {
     settingsFile.println("16 [-12,0,0,12,24] 2 up 1 down octaves");
 
     //
-
-
     // close the file:
     settingsFile.close();
     //Serial.println("Writing done.");
@@ -578,6 +625,15 @@ void reBoot(int delayTime){
     WRITE_RESTART(0x5FA0004);
 }
 
+void printRootInfo(int rootPot, int rootCV) {
+    Serial.print("Root ");
+    Serial.print(rootPot);
+    Serial.print(" ");
+    Serial.print(rootCV);
+    Serial.print(" ");
+    Serial.println(rootQuant);
+}
+
 void printPlaying(){
     Serial.print("Chord: ");
     Serial.print(chordQuant);
@@ -585,73 +641,14 @@ void printPlaying(){
     Serial.print(rootQuant);
     Serial.print(" ");
     for(int i = 0; i<SINECOUNT; i++){
-
         Serial.print(i);
         Serial.print(": ");
         Serial.print (FREQ[i]);
         Serial.print(" ");
         Serial.print(AMP[i]);
         Serial.print (" | ");
-
     }
     Serial.println("--");
 
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
