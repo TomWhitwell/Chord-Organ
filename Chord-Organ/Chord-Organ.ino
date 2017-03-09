@@ -107,8 +107,10 @@ int chordQuant;
 int chordQuantOld;
 int rootRaw;
 int rootRawOld;
+int rootPotOld;
 int rootQuant;
 int rootQuantOld;
+int rootMap[1024];
 boolean changed = true;
 
 boolean ResetCV;
@@ -238,6 +240,15 @@ void setup(){
     waveform7.begin(1.0,FREQ[6],wave_type[waveform]);
     waveform8.begin(1.0,FREQ[7],wave_type[waveform]); 
 
+    //make the rootMap
+    for(int i=0; i<1024; i++) {
+      if( i < 12 ) {
+        rootMap[i] = 0;
+      }else {
+        rootMap[i] = (i / 25.95) + 1;
+      }
+    }
+
 }
 
 
@@ -352,7 +363,7 @@ void updateSines(){
     waveform5.frequency(FREQ[4]);
     waveform6.frequency(FREQ[5]);
     waveform7.frequency(FREQ[6]);
-    waveform7.frequency(FREQ[7]);
+    waveform8.frequency(FREQ[7]);
 
 
     AudioInterrupts();
@@ -389,7 +400,7 @@ void checkInterface(){
     // Copy pots and CVs to new value 
     chordRaw = chordPot + chordCV; 
     chordRaw = constrain(chordRaw, 0, 1023);
-    rootRaw = rootPot + rootCV;   
+    rootRaw = rootCV;   
     rootRaw = constrain(rootRaw, 0U, 1023U); 
 
     // Apply hysteresis and filtering to prevent jittery quantization 
@@ -403,6 +414,14 @@ void checkInterface(){
         chordRaw = chordRawOld;  
     }
 
+    
+    if ((rootPot > rootPotOld + 16) || (rootPot < rootPotOld - 16)){
+        rootPotOld = rootPot;    
+    }
+    else {
+        rootPotOld += (rootPot - rootPotOld) >>5; 
+        rootPot = rootPotOld;  
+    }
 
 
     if ((rootRaw > rootRawOld + 16) || (rootRaw < rootRawOld - 16)){
@@ -421,7 +440,8 @@ void checkInterface(){
         chordQuantOld = chordQuant;    
     }
 
-    rootQuant = map(rootRaw,0,1024,36,84); // Range = C-2 (36) to C+2 (84)
+    //rootQuant = map(rootRaw,0,1024,36,84); // Range = C-2 (36) to C+2 (84)
+    rootQuant = rootMap[rootRaw] + map(rootPot,0,1024,36,84);
     if (rootQuant != rootQuantOld){
         changed = true; 
         rootQuantOld = rootQuant;  
