@@ -6,15 +6,20 @@
 #include <SerialFlash.h>
 #include <EEPROM.h>
 
-#define DEBUG_MODE
+#include "Settings.h"
+#include "Waves.h"
 
-#define CHORD_POT_PIN 9 // pin for Channel pot
-#define CHORD_CV_PIN 6 // pin for Channel CV 
-#define ROOT_POT_PIN 7 // pin for Time pot
-#define ROOT_CV_PIN 8 // pin for Time CV
+// #define DEBUG_STARTUP
+#define DEBUG_MODE
+// #define CHECK_CPU
+
+#define CHORD_POT_PIN 9 // pin for Chord pot
+#define CHORD_CV_PIN 6 // pin for Chord CV 
+#define ROOT_POT_PIN 7 // pin for Root Note pot
+#define ROOT_CV_PIN 8 // pin for Root Note CV
 #define RESET_BUTTON 8 // Reset button 
 #define RESET_LED 11 // Reset LED indicator 
-#define RESET_CV 9 // Reset pulse input 
+#define RESET_CV 9 // Reset pulse in / out
 #define BANK_BUTTON 2 // Bank Button 
 #define LED0 6
 #define LED1 5
@@ -28,85 +33,44 @@
 
 #define ADC_BITS 13
 #define ADC_MAX_VAL 8192
+#define CHANGE_TOLERANCE 64
 
 #define SINECOUNT 8
 #define LOW_NOTE 36
-#define CHECK_CPU false
 
-// Initialise Array with 999s, to identify unfilled elements when reading from SD card 
-int notesSD[16][8] = {
-    {        
-        999,999,999,999,999,999,999,999                                                                                                                                                                    }
-    ,    
-    {        
-        999,999,999,999,999,999,999,999                                                                                                                                                                     }
-    ,    
-    {   
-        999,999,999,999,999,999,999,999                                                                                                                                                                     }
-    ,    
-    {
-        999,999,999,999,999,999,999,999                                                                                                                                                                     }
-    ,    
-    {
-        999,999,999,999,999,999,999,999                                                                                                                                                                     }
-    ,    
-    {
-        999,999,999,999,999,999,999,999                                                                                                                                                                     }
-    ,    
-    {
-        999,999,999,999,999,999,999,999                                                                                                                                                                     }
-    ,    
-    {
-        999,999,999,999,999,999,999,999                                                                                                                                                                     }
-    ,    
-    {
-        999,999,999,999,999,999,999,999                                                                                                                                                                     }
-    ,    
-    {
-        999,999,999,999,999,999,999,999                                                                                                                                                                     }
-    ,    
-    {
-        999,999,999,999,999,999,999,999                                                                                                                                                                     }
-    ,    
-    {
-        999,999,999,999,999,999,999,999                                                                                                                                                                     }
-    ,    
-    {
-        999,999,999,999,999,999,999,999                                                                                                                                                                     }
-    ,    
-    {
-        999,999,999,999,999,999,999,999                                                                                                                                                                     }
-    ,    
-    {
-        999,999,999,999,999,999,999,999                                                                                                                                                                     }
-    ,    
-    {
-        999,999,999,999,999,999,999,999                                                                                                                                                                    }
-    ,    
-};
+// For arbitrary waveform, required but unused apparently.
+#define MAX_FREQ 600
 
+#define SHORT_PRESS_DURATION 10
+#define LONG_PRESS_DURATION 1000
 
-Bounce resetCV = Bounce( RESET_CV, 40 ); 
-boolean resetButton = false;
 File root;
-File settingsFile;
+
 int chordCount = 16;
 
-short wave_type[4] = {
-    WAVEFORM_SINE,
-    WAVEFORM_SQUARE,
-    WAVEFORM_SAWTOOTH,
-    WAVEFORM_PULSE,
-};
-int waveform = 0; 
-
+// Target frequency of each oscillator
 float FREQ[SINECOUNT] = {
     55,110, 220, 440, 880,1760,3520,7040};
+
+// Total distance between last note and new.
+// NOT distance per time step.
+float deltaFrequency[SINECOUNT] = {
+    0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
+
+// Keep track of current frequency of each oscillator
+float currentFrequency[SINECOUNT]  = {
+    55,110, 220, 440, 880,1760,3520,7040};
+
 float AMP[SINECOUNT] = { 
     0.9, 0.9, 0.9, 0.9,0.9, 0.9, 0.9, 0.9};
+
 // Volume for a single voice for each chord size
 float AMP_PER_VOICE[SINECOUNT] = {
   0.4,0.3,0.22,0.2,0.15,0.15,0.13,0.12};
+
+// Store midi note number to frequency in a table
+// Later can replace the table for custom tunings / scala support.
+float MIDI_TO_FREQ[128];
 
 int chordRaw;
 int chordRawOld;
@@ -124,22 +88,83 @@ float rootMapCoeff;
 // Root CV Pin readings below this level are clamped to LOW_NOTE
 int rootClampLow;
 
+// Flag for either chord or root note change
 boolean changed = true;
 boolean rootChanged = false;
-boolean ResetCV;
+
+Bounce resetCV = Bounce( RESET_CV, 40 ); 
+boolean resetButton = false;
+boolean resetCVRose;
+
 elapsedMillis resetHold;
 elapsedMillis resetFlash; 
 int updateCount = 0;
 
-elapsedMillis elapsed1 = 0;
+elapsedMillis buttonTimer = 0;
 elapsedMillis lockOut = 0;
 boolean shortPress = false;
 boolean longPress = false;
-elapsedMillis pulseOut = 0;
+elapsedMillis pulseOutTimer = 0;
 int flashTime = 10;
 boolean flashing = false;
 
+// WAVEFORM
+// Default wave types
+short wave_type[4] = {
+    WAVEFORM_SINE,
+    WAVEFORM_SQUARE,
+    WAVEFORM_SAWTOOTH,
+    WAVEFORM_PULSE,
+};
+// Current waveform index
+int waveform = 0; 
+
+// Waveform LED
+boolean flashingWave = false;
+elapsedMillis waveformIndicatorTimer = 0;
+
+int waveformPage = 0;
+int waveformPages = 1;
+
+// Custom wavetables
+int16_t const* waveTables[8] {
+    blend1,
+    blend2,
+    eb1,
+    eb2,    
+
+    fm4,
+    fm1,
+    fm6,
+    bit2
+};
+
+// Per-waveform amp level
+// First 4 are default waves, last 8 are custom wavetables
+float WAVEFORM_AMP[12] = {
+  0.8,0.8,0.8,0.8,
+  0.8,0.8,0.8,0.8,
+  0.8,0.8,0.8,0.8,
+};
+
+// GLIDE
+// Main flag for glide on / off
+boolean glide = false;
+// msecs glide time. 
+int glideTime = 50;
+// Time since glide started
+elapsedMillis glideTimer = 0;
+// Are we currently gliding notes
+boolean gliding = false;
+
+// Stack mode replicates first 4 voices into last 4 with tuning offset
+boolean stacked = false;
+float stackFreqScale = 1.001;
+
+int noteRange = 38;
+
 // GUItool: begin automatically generated code
+
 AudioSynthWaveform       waveform1;      //xy=215,232
 AudioSynthWaveform       waveform2;      //xy=243,295
 AudioSynthWaveform       waveform3;      //xy=273,354
@@ -166,7 +191,10 @@ AudioConnection          patchCord10(mixer2, 0, mixer3, 1);
 AudioConnection          patchCord11(mixer3, envelope1);
 AudioConnection          patchCord12(envelope1, dac1);
 // GUItool: end automatically generated code
+// Pointers to waveforms
+AudioSynthWaveform* oscillator[8];
 
+Settings settings("CHORDORG.TXT");
 
 void setup(){
     pinMode(BANK_BUTTON,INPUT);
@@ -180,12 +208,25 @@ void setup(){
     AudioMemory(50);
     analogReadRes(ADC_BITS);
     
-#ifdef DEBUG_MODE
+    oscillator[0] = &waveform1;
+    oscillator[1] = &waveform2;
+    oscillator[2] = &waveform3;
+    oscillator[3] = &waveform4;
+    oscillator[4] = &waveform5;
+    oscillator[5] = &waveform6;
+    oscillator[6] = &waveform7;
+    oscillator[7] = &waveform8;
+
+    for(int i=0;i<128;i++) {
+        MIDI_TO_FREQ[i] = numToFreq(i);
+    }
+
+#ifdef DEBUG_STARTUP
   while( !Serial );
-#endif // DEBUG_MODE
 
     Serial.println("Starting");
-    ledWrite(waveform);
+    // ledWrite(waveform);
+#endif // DEBUG_STARTUP
 
     // SD CARD SETTINGS FOR MODULE 
     SPI.setMOSI(7);
@@ -193,165 +234,186 @@ void setup(){
 
     // Read waveform settings from EEPROM 
     waveform = EEPROM.read(1234);
-    if (waveform > 3 || waveform < 0) waveform = 0;
-    ledWrite(waveform);
+
+#ifdef DEBUG_STARTUP
+    Serial.print("Waveform from EEPROM ");
+    Serial.println(waveform);
+#endif
+
+    if (waveform < 0) waveform = 0;
+    ledWrite(waveform % 4);
 
     // OPEN SD CARD 
-    int crashCountdown = 0; 
-    if (!(SD.begin(10))) {
-        while (!(SD.begin(10))) {
-            ledWrite(15);
-            delay(100);
-            ledWrite(0);
-            delay(100);
-            crashCountdown++;
-            if (crashCountdown > 6)     
-                reBoot(500);
-        }
-    }
+    boolean hasSD = openSDCard();
+
+#ifdef DEBUG_STARTUP
+    Serial.print("Has SD ");
+    Serial.println(hasSD);
+#endif    
     // READ SETTINGS FROM SD CARD 
-    root = SD.open("/");  
-    if (SD.exists("CHORDORG.TXT")) {
-        readSDSettings();
+    settings.init(hasSD);
+
+    chordCount = settings.numChords;
+    waveformPages = settings.extraWaves ? 3 : 1;
+    if(waveformPages > 1) {
+        waveformPage = waveform >> 2;
+    } else {
+        // If we read a custom waveform index from EEPROM
+        // but they are not enabled in the config then change back to sine
+        waveform = 0;
     }
-    else { 
-      
-#ifdef DEBUG_MODE
-        Serial.println("Settings file not found, writing new settings");
+
+    glide = settings.glide;
+    glideTime = settings.glideTime;
+    noteRange = settings.noteRange;
+    stacked = settings.stacked;
+
+#ifdef DEBUG_STARTUP
+    Serial.print("Waveform page ");
+    Serial.println(waveformPage);
+    Serial.print("Waveform set to ");
+    Serial.println(waveform);
+
+    Serial.println("-- Settings --");
+    Serial.print("Chord Count ");
+    Serial.println(chordCount);
+    Serial.print("Waveform Pages ");
+    Serial.println(waveformPages);
+    Serial.print("Glide ");
+    Serial.println(glide);
+    Serial.print("Glide Time ");
+    Serial.println(glideTime);
+    Serial.print("Note Range ");
+    Serial.println(noteRange);
+    Serial.print("Stacked ");
+    Serial.println(stacked);
+
 #endif
-        writeSDSettings();
-        readSDSettings();
-    };
 
+    // Setup audio
+    for(int i=0;i<SINECOUNT;i++) {
+        oscillator[i]->pulseWidth(0.5);
+    }
 
-    // Setup audio 
-    waveform1.pulseWidth(0.2);
-    waveform2.pulseWidth(0.5);
-    waveform3.pulseWidth(0.5);
-    waveform4.pulseWidth(0.5);
-    waveform5.pulseWidth(0.5);
-    waveform6.pulseWidth(0.5);
-    waveform7.pulseWidth(0.5);
-    waveform8.pulseWidth(0.5);
-    mixer1.gain(0,0.25);
-    mixer1.gain(1,0.25);
-    mixer1.gain(2,0.25);
-    mixer1.gain(3,0.25);
-    mixer2.gain(0,0.25);
-    mixer2.gain(1,0.25);
-    mixer2.gain(2,0.25);
-    mixer2.gain(3,0);
+    for(int m=0;m<4;m++) {
+        mixer1.gain(m,0.25);
+        mixer2.gain(m,0.25);
+    }
+
     mixer3.gain(0,0.49);
     mixer3.gain(1,0.49);
     mixer3.gain(2,0);
     mixer3.gain(3,0);
+
     envelope1.attack(1);
     envelope1.decay(1);
     envelope1.sustain(1.0);
     envelope1.release(1);
     envelope1.noteOn();
-    waveform1.begin(1.0,FREQ[0],wave_type[waveform]);
-    waveform2.begin(1.0,FREQ[1],wave_type[waveform]);
-    waveform3.begin(1.0,FREQ[2],wave_type[waveform]);
-    waveform4.begin(1.0,FREQ[3],wave_type[waveform]);
-    waveform5.begin(1.0,FREQ[4],wave_type[waveform]);
-    waveform6.begin(1.0,FREQ[5],wave_type[waveform]);
-    waveform7.begin(1.0,FREQ[6],wave_type[waveform]);
-    waveform8.begin(1.0,FREQ[7],wave_type[waveform]); 
 
-    // TODO : Check if this is in the config and use that    
-    int noteRange = 38;
-
+    if(waveformPage == 0) {
+        // First page is built in waveforms
+        setWaveformType(wave_type[waveform]);
+    } else {
+        // Second and third pages are arbitrary waves
+        setupCustomWaveform(waveform);
+        // Start the wave led flashing
+        flashingWave = true;
+        waveformIndicatorTimer = 0;
+    }
+    
     // This makes the CV input range for the low note half the size of the other notes.
     rootClampLow = ((float)ADC_MAX_VAL / noteRange) * 0.5;
     // Now map the rest of the range linearly across the input range
     rootMapCoeff = (float)noteRange / (ADC_MAX_VAL - rootClampLow);
 
+#ifdef DEBUG_STARTUP
     Serial.print("Root Clamp Low ");
     Serial.println(rootClampLow);
     Serial.print("Root Map Coeff ");
-    Serial.println(rootMapCoeff);
+    Serial.println(rootMapCoeff * 100);
+#endif
+
 }
 
+boolean openSDCard() {
+    int crashCountdown = 0; 
+    if (!(SD.begin(10))) {
+        while (!(SD.begin(10))) {
+            ledWrite(15);
+            delay(50);
+            ledWrite(0);
+            delay(50);
+            crashCountdown++;
+            if (crashCountdown > 6) {
+                return false;
+                //reBoot(500);
+            }
+        }
+    }
+    return true;
+}
 
 void loop(){
+
     checkInterface();
-
-    int result;
-
 
     if (changed) {
 
-        int voiceCount = 0;
-        float voiceTotal = 0;
-        for(int i = 0; i< SINECOUNT; i++){
-            if (notesSD[chordQuant][i] != 999) {
-                result = rootQuant + notesSD[chordQuant][i];
-                float freq = numToFreq(result);
-                FREQ[i] = freq;
-                voiceCount++;
-            }
-        }
-        float ampPerVoice = AMP_PER_VOICE[voiceCount-1];
-//        Serial.print("Amp ");
-//        Serial.println(ampPerVoice);
-
-        for (int i = 0; i< SINECOUNT; i++){
-            if (notesSD[chordQuant][i] != 999) {
-                AMP[i] = ampPerVoice;
-                voiceTotal += ampPerVoice;
-            }
-            else{
-                AMP[i] = 0.0;   
-            }
+        // Serial.println("Changed");
+        updateAmpAndFreq();
+        if(glide) {
+            glideTimer = 0;
+            gliding = true;
+            // Serial.println("Start glide");
         }
 
-        if(CHECK_CPU) {
-            int maxCPU = AudioProcessorUsageMax();
-            Serial.print("MaxCPU=");
-            Serial.println(maxCPU);            
-        }
+        #ifdef CHECK_CPU
+        int maxCPU = AudioProcessorUsageMax();
+        Serial.print("MaxCPU=");
+        Serial.println(maxCPU);
+        #endif // CHECK_CPU
     }
 
-
     // CHECK BUTTON STATUS 
-
     resetHold = resetHold * resetButton;
-
 
     if (shortPress){
         waveform++;
-        waveform = waveform % 4;
-        ledWrite(waveform);
+        waveform = waveform % (4 * waveformPages);
+        selectWaveform(waveform);
         changed = true;
-        EEPROM.write(1234, waveform);
         shortPress = false;
-        AudioNoInterrupts();  
-        waveform1.begin(1.0,FREQ[0],wave_type[waveform]);
-        waveform2.begin(1.0,FREQ[1],wave_type[waveform]);
-        waveform3.begin(1.0,FREQ[2],wave_type[waveform]);
-        waveform4.begin(1.0,FREQ[3],wave_type[waveform]);
-        waveform5.begin(1.0,FREQ[4],wave_type[waveform]);
-        waveform6.begin(1.0,FREQ[5],wave_type[waveform]);
-        waveform7.begin(1.0,FREQ[6],wave_type[waveform]);
-        waveform8.begin(1.0,FREQ[7],wave_type[waveform]); 
-        AudioInterrupts();
     }
 
     if (changed)  {
-        pulseOut = 0;
+        // Serial.println("Trig Out");
+        pulseOutTimer = 0;
         flashing = true;
         pinMode(RESET_CV, OUTPUT);
         digitalWrite (RESET_LED, HIGH);
         digitalWrite (RESET_CV, HIGH);
 
-        updateSines();
+        AudioNoInterrupts();
+        updateFrequencies();
+        updateAmps();
+        AudioInterrupts();
 
         changed = false;
     }
 
+    if(gliding) {
+        if(glideTimer >= glideTime) {
+            gliding = false;
+        }
+        AudioNoInterrupts();
+        updateFrequencies();
+        AudioInterrupts();
+    }
 
-    if (pulseOut > flashTime && flashing == true){
+    updateWaveformLEDs();
+
+    if (flashing && (pulseOutTimer > flashTime)) {
         digitalWrite (RESET_LED, LOW);
         digitalWrite (RESET_CV, LOW);
         pinMode(RESET_CV, INPUT);
@@ -359,44 +421,179 @@ void loop(){
     } 
 }
 
-void updateSines(){
-    //    Serial.println("changing");
-    //    envelope1.noteOff();
-    //    delay(1);
+void updateAmpAndFreq() {
+    uint8_t* chord = settings.notes[chordQuant];
 
-    AudioNoInterrupts();  
+    int noteNumber;
+    int voiceCount = 0;
+    int halfSinecount = SINECOUNT>>1;
 
-    mixer1.gain(0,AMP[0]);
-    mixer1.gain(1,AMP[1]);
-    mixer1.gain(2,AMP[2]);
-    mixer1.gain(3,AMP[3]);
-    mixer2.gain(0,AMP[4]);
-    mixer2.gain(1,AMP[5]);
-    mixer2.gain(2,AMP[6]);
-    mixer2.gain(3,AMP[7]);
+    if(stacked) {
+        for(int i=0;i < halfSinecount;i++) {
+            if (chord[i] != 255) {
+                noteNumber = rootQuant + chord[i];
+                if(noteNumber < 0) noteNumber = 0;
+                if(noteNumber > 127) noteNumber = 127;
+                float newFreq = MIDI_TO_FREQ[noteNumber];
 
-    waveform1.frequency(FREQ[0]);
-    waveform2.frequency(FREQ[1]);
-    waveform3.frequency(FREQ[2]);
-    waveform4.frequency(FREQ[3]);
-    waveform5.frequency(FREQ[4]);
-    waveform6.frequency(FREQ[5]);
-    waveform7.frequency(FREQ[6]);
-    waveform8.frequency(FREQ[7]);
+                FREQ[i] = newFreq;
+                FREQ[i+halfSinecount] = newFreq * stackFreqScale;
+                // Serial.println("Stack Freq");
+                // Serial.println(FREQ[i]);
+                // Serial.println(FREQ[i+halfSinecount]);
 
-    AudioInterrupts();
-    //    envelope1.noteOn();
-    //    delay(1);
-    //    printPlaying();
+                deltaFrequency[i] = newFreq - currentFrequency[i];
+                deltaFrequency[i+halfSinecount] = (newFreq * stackFreqScale) - currentFrequency[i];
 
+                voiceCount += 2;
+            }            
+        }
+    } else {
+        for(int i = 0; i< SINECOUNT; i++){
+            if (chord[i] != 255) {
+                noteNumber = rootQuant + chord[i];
+                if(noteNumber < 0) noteNumber = 0;
+                if(noteNumber > 127) noteNumber = 127;
+                float newFreq = MIDI_TO_FREQ[noteNumber];
+
+                // TODO : Allow option to choose between jump from current or new?
+                //deltaFrequency[i] = newFreq - FREQ[i];
+                deltaFrequency[i] = newFreq - currentFrequency[i];
+
+                // Serial.print("Delta ");
+                // Serial.print(i);
+                // Serial.print(" ");
+                // Serial.print(deltaFrequency[i]);
+                // Serial.print(" ");
+                // Serial.println(newFreq);
+
+                FREQ[i] = newFreq;
+                voiceCount++;
+            }
+        }
+
+    }
+
+    float ampPerVoice = AMP_PER_VOICE[voiceCount-1];
+    float totalAmp = 0;
+
+    if(stacked) {
+        for (int i = 0; i < halfSinecount; i++){
+            if (chord[i] != 255) {
+                AMP[i] = ampPerVoice;
+                AMP[i + halfSinecount] = ampPerVoice; 
+                totalAmp += ampPerVoice;
+            }
+            else{
+                AMP[i] = 0.0;   
+            }
+        }        
+    } else {
+        for (int i = 0; i< SINECOUNT; i++){
+            if (chord[i] != 255) {
+                AMP[i] = ampPerVoice;
+                totalAmp += ampPerVoice;
+            }
+            else{
+                AMP[i] = 0.0;   
+            }
+        }        
+    }
 }
 
-float numToFreq(int input) {
-    int number = input - 21; // set to midi note numbers = start with 21 at A0 
-    number = number - 48; // A0 is 48 steps below A4 = 440hz
-    float result; 
-    result = 440*(pow (1.059463094359,number));
-    return result;   
+void selectWaveform(int waveform) {
+    waveformPage = waveform >> 2;
+    if(waveformPage > 0) {
+        flashingWave = true;
+        waveformIndicatorTimer = 0;
+    }  
+    ledWrite(waveform % 4);
+    EEPROM.write(1234, waveform);
+
+    #ifdef DEBUG_MODE
+    Serial.print("Waveform ");
+    Serial.println(waveform);
+    Serial.print("Waveform page ");
+    Serial.println(waveformPage);
+    #endif // DEBUG_MODE
+
+    AudioNoInterrupts();
+    if(waveformPage == 0) {
+        setWaveformType(wave_type[waveform]);
+    } else {
+        setupCustomWaveform(waveform);    
+    }
+    AudioInterrupts();    
+}
+
+void setWaveformType(short waveformType) {
+    for(int i=0;i<SINECOUNT;i++) {
+        oscillator[i]->begin(1.0,FREQ[i],waveformType);
+    }   
+}
+
+void setupCustomWaveform(int waveselect) {
+    waveselect = (waveselect - 4) % 8;
+
+    const int16_t* wave = waveTables[waveselect];
+    for(int i=0;i<SINECOUNT;i++) {
+        oscillator[i]->arbitraryWaveform(wave, MAX_FREQ);
+    }
+
+    setWaveformType(WAVEFORM_ARBITRARY);
+}
+
+void updateWaveformLEDs() {
+    // Flash waveform LEDs for custom waves
+    if(waveformPage > 0) {
+        int blinkTime = 100 + ((waveformPage - 1) * 300);
+        if(waveformIndicatorTimer >= blinkTime) {
+            waveformIndicatorTimer = 0;
+            flashingWave = !flashingWave;
+            if(flashingWave) {
+                ledWrite(waveform % 4);
+            } else {
+                ledWrite(15);
+            }
+        }
+    }    
+}
+
+void updateFrequencies() {
+
+    if(gliding) {
+        // TODO : Replace division with reciprocal multiply.
+        float dt = 1.0 - ((float)glideTimer / glideTime);
+        if(dt < 0.0) {
+            dt = 0.0;
+            gliding = false;
+        }
+        // Serial.print("dt ");
+        // Serial.print(dt);
+        // Serial.print(" ");
+        // Serial.println(glideTimer);
+
+        for(int i=0;i<SINECOUNT;i++) {
+            currentFrequency[i] = FREQ[i] - (deltaFrequency[i] * dt);
+            oscillator[i]->frequency(currentFrequency[i]);
+        }
+    } else {
+        for(int i=0;i<SINECOUNT;i++) {
+            oscillator[i]->frequency(FREQ[i]);
+        }
+    }
+}
+
+void updateAmps(){
+    float waveAmp = WAVEFORM_AMP[waveform];
+    mixer1.gain(0,AMP[0] * waveAmp);
+    mixer1.gain(1,AMP[1] * waveAmp);
+    mixer1.gain(2,AMP[2] * waveAmp);
+    mixer1.gain(3,AMP[3] * waveAmp);
+    mixer2.gain(0,AMP[4] * waveAmp);
+    mixer2.gain(1,AMP[5] * waveAmp);
+    mixer2.gain(2,AMP[6] * waveAmp);
+    mixer2.gain(3,AMP[7] * waveAmp);
 }
 
 // WRITE A 4 DIGIT BINARY NUMBER TO LED0-LED3 
@@ -426,7 +623,7 @@ void checkInterface(){
     // Apply hysteresis and filtering to prevent jittery quantization 
     // Thanks to Matthias Puech for this code 
 
-    if ((chordRaw > chordRawOld + 16) || (chordRaw < chordRawOld - 16)){
+    if ((chordRaw > chordRawOld + CHANGE_TOLERANCE) || (chordRaw < chordRawOld - CHANGE_TOLERANCE)){
         chordRawOld = chordRaw;    
     }
     else {
@@ -435,7 +632,7 @@ void checkInterface(){
     }
 
     // Do Pot and CV separately
-    if ((rootPot > rootPotOld + 16) || (rootPot < rootPotOld - 16)){
+    if ((rootPot > rootPotOld + CHANGE_TOLERANCE) || (rootPot < rootPotOld - CHANGE_TOLERANCE)){
         rootPotOld = rootPot;
         rootChanged = true;
     }
@@ -443,7 +640,7 @@ void checkInterface(){
         rootPotOld += (rootPot - rootPotOld) >>5;
         rootPot = rootPotOld;
     }
-    if ((rootCV > rootCVOld + 16) || (rootCV < rootCVOld - 16)){
+    if ((rootCV > rootCVOld + CHANGE_TOLERANCE) || (rootCV < rootCVOld - CHANGE_TOLERANCE)){
         rootCVOld = rootCV;
         rootChanged = true;
     }
@@ -471,153 +668,36 @@ void checkInterface(){
         rootQuantOld = rootQuant;  
     }
 
+#ifdef DEBUG_MODE
    if(rootChanged) {
         // printRootInfo(rootPot,rootCV);
    }
+#endif
 
     //    resetSwitch.update();
     //    resetButton = resetSwitch.read();
 
     int buttonState = digitalRead(RESET_BUTTON);
-    if (elapsed1 > 10 && buttonState == 0 && lockOut > 999 ){
+    if (buttonTimer > SHORT_PRESS_DURATION && buttonState == 0 && lockOut > 999 ){
         shortPress = true;    
     }
-    elapsed1 = elapsed1 * buttonState; 
-    if (elapsed1 > 1000){
+
+    buttonTimer = buttonTimer * buttonState; 
+    if (buttonTimer > LONG_PRESS_DURATION){
         longPress = true;
         lockOut = 0;
-        elapsed1 = 0;
+        buttonTimer = 0;
     }
 
     if (!flashing){
         resetCV.update();
-        ResetCV = resetCV.rose();
-        if (ResetCV) resetFlash = 0; 
+        resetCVRose = resetCV.rose();
+        if (resetCVRose) resetFlash = 0; 
 
         digitalWrite(RESET_LED, (resetFlash<20));
     }
 
 }
-
-//////////////////////////////////////////////
-////READ AND WRITE SETTINGS ON THE SD CARD ///
-//////////////////////////////////////////////
-
-
-void readSDSettings(){
-    char character;
-    int entry = 0;
-    int note = 0;
-    String settingValue;
-    boolean inBracket = false;
-    settingsFile = SD.open("CHORDORG.TXT");
-    while (settingsFile.available()) {
-        character = settingsFile.read();   
-        if (character == '[') {
-            inBracket = true; 
-        }
-
-        if (character == ','  && inBracket){
-            Serial.print("Note ");
-            Serial.println(settingValue.toInt());
-            notesSD[entry][note] = settingValue.toInt();
-            settingValue = "";   
-            note++;
-        }
-
-        if (character == ']'  && inBracket) {
-            Serial.print("Note ");
-            Serial.println(settingValue.toInt());
-            notesSD[entry][note] = settingValue.toInt();
-            settingValue = "";
-            entry++;
-            note = 0;
-            inBracket = false;
-        }
-
-        else if (inBracket && character != '[' && character != ',' && character != ']'){
-            settingValue += character; 
-        }
-
-        if(entry == 16) {
-          break;
-        }
-    }   
-    settingsFile.close();
-
-    // Update chordCount so that the mapping of Chord Knob / Chord CV covers the range available
-    chordCount = entry;
-}
-
-
-// converting string to Float
-float toFloat(String settingValue){
-    char floatbuf[settingValue.length()];
-    settingValue.toCharArray(floatbuf, sizeof(floatbuf));
-    float f = atof(floatbuf);
-    return f;
-}
-// Converting String to integer and then to boolean
-// 1 = true
-// 0 = false
-boolean toBoolean(String settingValue) {
-    if(settingValue.toInt()==1){
-        return true;
-    } 
-    else {
-        return false;
-    }
-}
-// Writes A Configuration file
-void writeSDSettings() {
-    // Delete the old One
-    SD.remove("CHORDORG.TXT");
-    // Create new one
-    settingsFile = SD.open("CHORDORG.TXT", FILE_WRITE);
-    //  // writing in the file works just like regular print()/println() function
-
-    settingsFile.println("o   o o   o  o-o  o-O-o   o-o   o-O-o o  o o-O-o o   o  o-o ");
-    settingsFile.println("|\\ /| |   | |       |    /        |   |  |   |   |\\  | o    ");
-    settingsFile.println("| O | |   |  o-o    |   O         |   O--O   |   | \\ | |  -o ");
-    settingsFile.println("|   | |   |     |   |    \\        |   |  |   |   |  \\| o   | ");
-    settingsFile.println("o   o  o-o  o--o  o-O-o   o-o     o   o  o o-O-o o   o  o-o ");
-    settingsFile.println("");
-    settingsFile.println("  o-o o  o  o-o  o--o  o-o        o-o  o--o   o-o    O  o   o ");
-    settingsFile.println(" /    |  | o   o |   | |  \\      o   o |   | o      / \\ |\\  | ");
-    settingsFile.println("O     O--O |   | O-Oo  |   O     |   | O-Oo  |  -o o---o| \\ | ");
-    settingsFile.println(" \\    |  | o   o |  \\  |  /      o   o |  \\  o   | |   ||  \\| ");
-    settingsFile.println("  o-o o  o  o-o  o   o o-o        o-o  o   o  o-o  o   oo   o");
-    settingsFile.println("");
-    settingsFile.println("Edit chord shapes into the spaces below.");
-    settingsFile.println("No more than 16 chords and up to 8 notes per chord.");
-    settingsFile.println("Anything outside the square brackets is ignored");
-    settingsFile.println("Reduce clicks on chord changes by giving all chords");
-    settingsFile.println("the same number of notes.");
-    settingsFile.println("");
-
-    settingsFile.println("1  [0,4,7,12,0] Major");
-    settingsFile.println("2  [0,3,7,12,0] Minor");
-    settingsFile.println("3  [0,4,7,11,0] Major 7th");
-    settingsFile.println("4  [0,3,7,10,0] Minor 7th");
-    settingsFile.println("5  [0,4,7,11,14] Major 9th");
-    settingsFile.println("6  [0,3,7,10,14] Minor 9th");
-    settingsFile.println("7  [0,5,7,12,0] Suspended 4th");
-    settingsFile.println("8  [0,7,12,0,7] Power 5th");
-    settingsFile.println("9  [0,5,12,0,5] Power 4th");
-    settingsFile.println("10 [0,4,7,8,0] Major 6th");
-    settingsFile.println("11 [0,3,7,8,0] Minor 6th");
-    settingsFile.println("12 [0,3,6,0,3] Diminished");
-    settingsFile.println("13 [0,4,8,0,4] Augmented");
-    settingsFile.println("14 [0,0,0,0,0] Root");
-    settingsFile.println("15 [-12,-12,0,0,0] Sub Octave");
-    settingsFile.println("16 [-12,0,0,12,24] 2 up 1 down octaves");
-
-    //
-    // close the file:
-    settingsFile.close();
-    //Serial.println("Writing done.");
-}
-
 
 void reBoot(int delayTime){
     if (delayTime > 0)
@@ -652,3 +732,8 @@ void printPlaying(){
 
 }
 
+float numToFreq(int input) {
+    int number = input - 21; // set to midi note numbers = start with 21 at A0 
+    number = number - 48; // A0 is 48 steps below A4 = 440hz
+    return 440*(pow (1.059463094359,number));
+}
