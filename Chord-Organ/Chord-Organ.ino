@@ -72,8 +72,13 @@ float MIDI_TO_FREQ[128];
 
 int chordRaw;
 int chordRawOld;
+int chordCVRaw;
+int chordCVRawOld;
 int chordQuant;
 int chordQuantOld;
+
+int voiceQuant = 0;
+int voiceQuantOld = 0;;
 
 int rootPotOld;
 int rootCVOld;
@@ -423,6 +428,7 @@ void loop(){
 
 void updateAmpAndFreq() {
     int16_t* chord = settings.notes[chordQuant];
+    int16_t* voicing = settings.voicings[voiceQuant];
 
     int noteNumber;
     int voiceCount = 0;
@@ -432,6 +438,7 @@ void updateAmpAndFreq() {
         for(int i=0;i < halfSinecount;i++) {
             if (chord[i] != 255) {
                 noteNumber = rootQuant + chord[i];
+                noteNumber += voicing[i];
                 if(noteNumber < 0) noteNumber = 0;
                 if(noteNumber > 127) noteNumber = 127;
                 float newFreq = MIDI_TO_FREQ[noteNumber];
@@ -452,6 +459,7 @@ void updateAmpAndFreq() {
         for(int i = 0; i< SINECOUNT; i++){
             if (chord[i] != 255) {
                 noteNumber = rootQuant + chord[i];
+                noteNumber += voicing[i];
                 if(noteNumber < 0) noteNumber = 0;
                 if(noteNumber > 127) noteNumber = 127;
                 float newFreq = MIDI_TO_FREQ[noteNumber];
@@ -613,8 +621,9 @@ void checkInterface(){
     int rootCV = analogRead(ROOT_CV_PIN); 
 
     // Copy pots and CVs to new value 
-    chordRaw = chordPot + chordCV; 
-    chordRaw = constrain(chordRaw, 0, ADC_MAX_VAL - 1);
+    //chordRaw = chordPot + chordCV;
+    chordRaw = constrain(chordPot, 0, ADC_MAX_VAL - 1);
+    chordCVRaw = constrain(chordCV, 0, ADC_MAX_VAL - 1);
 
     rootPot = constrain(rootPot, 0, ADC_MAX_VAL - 1);
     rootCV = constrain(rootCV, 0, ADC_MAX_VAL - 1);
@@ -631,6 +640,14 @@ void checkInterface(){
         chordRaw = chordRawOld;  
     }
 
+    if ((chordCVRaw > chordCVRawOld + CHANGE_TOLERANCE) || (chordCVRaw < chordCVRawOld - CHANGE_TOLERANCE)){
+        chordCVRawOld = chordCVRaw;    
+    }
+    else {
+        chordCVRawOld += (chordCVRaw - chordCVRawOld) >>5; 
+        chordCVRaw = chordCVRawOld;  
+    }
+    
     // Do Pot and CV separately
     if ((rootPot > rootPotOld + CHANGE_TOLERANCE) || (rootPot < rootPotOld - CHANGE_TOLERANCE)){
         rootPotOld = rootPot;
@@ -648,11 +665,31 @@ void checkInterface(){
         rootCVOld += (rootCV - rootCVOld) >>5;
         rootCV = rootCVOld;
     }
-
-    chordQuant = map(chordRaw, 0, ADC_MAX_VAL, 0, chordCount);
+    if(settings.useVoicing) {
+        if(settings.cvSelect == 0) {
+            chordQuant = map(chordRaw, 0, ADC_MAX_VAL, 0, chordCount);
+            voiceQuant = map(chordCVRaw, 0, ADC_MAX_VAL, 0, chordCount);
+            //Serial.println(" useVoicing and cvSelect == 0");
+        }else if(settings.cvSelect == 1) {
+            chordQuant = map(chordCVRaw, 0, ADC_MAX_VAL, 0, chordCount);
+            voiceQuant = map(chordRaw, 0, ADC_MAX_VAL, 0, chordCount);
+            //Serial.println(" useVoicing and cvSelect == 1");
+        }
+    }else {
+      chordQuant = constrain(chordRaw + chordCVRaw, 0,ADC_MAX_VAL - CHANGE_TOLERANCE);
+      chordQuant = map(chordQuant, 0, ADC_MAX_VAL, 0, chordCount);
+      //Serial.println(" useVoicing is False ");
+    }
+            
+        
     if (chordQuant != chordQuantOld){
         changed = true; 
         chordQuantOld = chordQuant;    
+    }
+
+    if (voiceQuant != voiceQuantOld){
+        changed = true; 
+        voiceQuantOld = voiceQuant;    
     }
 
     // Map ADC reading to Note Numbers

@@ -35,19 +35,28 @@ void Settings::copyDefaults() {
 			notes[i][a] = defaultNotes[i][a];
 		}
 	}
+        for(int i=0;i<16;i++) {
+		for(int a=0;a<8;a++) {
+			voicings[i][a] = defaultVoicings[i][a];
+		}
+	}
+
 	numChords = 16;
 }
 
 void Settings::read() {
     numChords = 0;
-
+    numVoicings = 0;
+    
     char character;
     int note = 0;
+    int voice = 0;
     String settingValue;
 
     int NONE = 0;
     int CHORD = 1;
     int SETTING = 2;
+    int VOICE = 3;
     int state = NONE;
 
     settingsFile = SD.open(_filename);
@@ -60,6 +69,10 @@ void Settings::read() {
             if(numChords < 16) {
                 // Serial.println("Enter Chord");
                 state = CHORD;    
+            }
+        } else if (character == '{') {
+            if(numVoicings < 16) {
+                state = VOICE;
             }
         } else if(character == '!') {
             state = SETTING;
@@ -83,6 +96,30 @@ void Settings::read() {
                 settingValue = "";
                 numChords++;
                 note = 0;
+                // Serial.println("End Chord");
+                state = NONE;
+            } else {
+                settingValue += character;     
+            }
+
+        } else if(state == VOICE) {
+            if (character == ',') {
+            	#ifdef DEBUG_CHORDS
+                Serial.print("VOICE ");
+                Serial.println(settingValue.toInt());
+                #endif
+                voicings[numVoicings][voice] = settingValue.toInt();
+                settingValue = "";   
+                voice++;
+            } else if(character == '}') {
+            	#ifdef DEBUG_CHORDS
+                Serial.print("VOICE ");
+                Serial.println(settingValue.toInt());
+                #endif
+                voicings[numVoicings][voice] = settingValue.toInt();
+                settingValue = "";
+                numVoicings++;
+                voice = 0;
                 // Serial.println("End Chord");
                 state = NONE;
             } else {
@@ -116,6 +153,13 @@ void Settings::read() {
                     }
                 } else if(settingValue.startsWith("!STACK")) {
                 	stacked = true;
+                } else if(settingValue.startsWith("!VOICE")) {
+                        useVoicing = true;
+                        int spacePos = settingValue.indexOf(' ');
+                        if(spacePos > 0) {
+                          cvSelect = settingValue.substring(spacePos).toInt();
+                          if(cvSelect != 0 && cvSelect != 1) cvSelect = 0;
+                        }
                 } else {
                     Serial.print("Unknown option:");
                     Serial.print(settingValue);
@@ -195,6 +239,31 @@ void Settings::write() {
     settingsFile.println("15 [-12,-12,0,0,0] Sub Octave");
     settingsFile.println("16 [-12,0,0,12,24] 2 up 1 down octaves");
 
+    settingsFile.println("");
+    settingsFile.println("Edit chord voicings in the next space below.");
+    settingsFile.println("No more than 16 voicings and up to 8 notes per voicing.");
+    settingsFile.println("A voicing of 0 does not alter the chord.");
+    settingsFile.println("Take care to use curly '{' brackets rather than square.");
+    settingsFile.println("");
+
+    settingsFile.println("1  {0,0,0,0,0,0,0,0} Unaltered voice");
+    settingsFile.println("2  {0,12,0,0,0,0,0,0} 2nd note up an Octave");
+    settingsFile.println("3  {0,12,0,12,0,0,0,0} 2nd and 4th up an Octave");
+    settingsFile.println("4  {0,12,12,12,0,0,0,0} ");
+    settingsFile.println("5  {0,12,0,12,12,0,0,0} ");
+    settingsFile.println("6  {0,12,12,12,12,0,0,0} ");
+    settingsFile.println("7  {12,12,0,12,0,0,0,0} ");
+    settingsFile.println("8  {0,7,0,0,0,0,0,0} 2nd note up a 5th");
+    settingsFile.println("9  {0,7,7,0,0,0,0,0} 2nd and 3rd up a 5th");
+    settingsFile.println("10 {0,1,2,0,0,0,0,0} 2nd up 1 step, 3rd up 2 steps");
+    settingsFile.println("11 {-1,1,0,0,0,0,0,0} 1st down a step, 2nd up a step");
+    settingsFile.println("12 {-12,12,24,0,0,0,0,0} 1st down an Octave, 2nd up an Octave, 3rd up 2 Octaves");
+    settingsFile.println("13 {12,12,0,0,0,0,0,0}");
+    settingsFile.println("14 {12,12,12,0,0,0,0,0}");
+    settingsFile.println("15 {12,12,12,12,12,12,12,12} All up an Octave");
+    settingsFile.println("16 {-12,-12,-12,-12,-12,-12,-12,-12} All down an Octave");
+
+    
     //
     // close the file:
     settingsFile.close();

@@ -15,9 +15,13 @@ class Settings {
 	boolean stacked = false;
     boolean extraWaves = false;
     boolean glide = false;
+    boolean useVoicing = false;
+    int cvSelect = 0;
     int glideTime = 50;
     uint8_t noteRange = 38;
     uint8_t numChords = 0;
+    uint8_t numVoicings = 0;
+    
 	// Initialise Array with 255s, to identify unfilled elements when reading from SD card 
 	int16_t notes[16][8] = {
 	    {        
@@ -118,7 +122,65 @@ class Settings {
 	    {
 	        -12,0,0,12,24,255,255,255}
 	    ,    
-	};	
+	};
+
+        // voicing is added to note quantisation
+        // start with all zeros so no change
+        int16_t voicings[16][8] = {
+          {0,0,0,0,0,0,0,0},
+          {0,0,0,0,0,0,0,0},
+          {0,0,0,0,0,0,0,0},
+          {0,0,0,0,0,0,0,0},
+          {0,0,0,0,0,0,0,0},
+          {0,0,0,0,0,0,0,0},
+          {0,0,0,0,0,0,0,0},
+          {0,0,0,0,0,0,0,0},
+          {0,0,0,0,0,0,0,0},
+          {0,0,0,0,0,0,0,0},
+          {0,0,0,0,0,0,0,0},
+          {0,0,0,0,0,0,0,0},
+          {0,0,0,0,0,0,0,0},
+          {0,0,0,0,0,0,0,0},
+          {0,0,0,0,0,0,0,0},
+          {0,0,0,0,0,0,0,0}
+        };
+
+        // default voicings
+        int16_t defaultVoicings[16][8] = {
+          {
+            0,0,0,0,0,0,0,0}
+          ,{
+            0,12,0,0,0,0,0,0}
+          ,{
+            0,12,0,12,0,0,0,0}
+          ,{
+            0,12,12,12,0,0,0,0}
+          ,{
+            0,12,0,12,12,0,0,0}
+          ,{
+            0,12,12,12,12,0,0,0}
+          ,{
+            12,12,0,12,0,0,0,0}
+          ,{
+            0,7,0,0,0,0,0,0}
+          ,{
+            0,7,7,0,0,0,0,0}
+          ,{
+            0,1,2,0,0,0,0,0}
+          ,{
+            -1,1,0,0,0,0,0,0}
+          ,{
+            -12,12,24,0,0,0,0,0}
+          ,{
+            12,12,0,0,0,0,0,0}
+          ,{
+            12,12,12,0,0,0,0,0}
+          ,{
+            12,12,12,12,12,12,12,12}
+          ,{
+            -12,-12,-12,-12,-12,-12,-12,-12}
+        };
+
   private:
     const char* _filename;
     File settingsFile;
