@@ -15,10 +15,12 @@ class Settings {
 	boolean stacked = false;
     boolean extraWaves = false;
     boolean glide = false;
+    boolean vOct = false;
     boolean useVoicing = false;
     int cvSelect = 0;
     int glideTime = 50;
     uint8_t noteRange = 38;
+    uint8_t vOctCal = 48;
     uint8_t numChords = 0;
     uint8_t numVoicings = 0;
     

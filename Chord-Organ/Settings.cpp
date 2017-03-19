@@ -151,6 +151,16 @@ void Settings::read() {
                         if(noteRange < 12) noteRange = 12;
                         if(noteRange > 72) noteRange = 72;
                     }
+                    
+                } else if(settingValue.startsWith("!1VOCT")) {
+                    vOct = true;
+                    int spacePos = settingValue.indexOf(' ');
+                    if(spacePos > 0) {
+                        vOctCal = settingValue.substring(spacePos).toInt();
+                        if(vOctCal < 0) vOctCal = 0;
+                        if(vOctCal > 182) vOctCal = 182;
+                    }
+                    
                 } else if(settingValue.startsWith("!STACK")) {
                 	stacked = true;
                 } else if(settingValue.startsWith("!VOICE")) {
