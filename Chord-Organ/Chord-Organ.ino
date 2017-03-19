@@ -196,12 +196,17 @@ float oneOverGlideTime = 0.02;
 elapsedMillis glideTimer = 0;
 // Are we currently gliding notes
 boolean gliding = false;
+// Voicing flag
+boolean useVoicing = false;
 // Enable 1v/Oct
 boolean vOct = false;
 
 // Stack mode replicates first 4 voices into last 4 with tuning offset
 boolean stacked = false;
 float stackFreqScale = 1.001;
+
+// Select CV control for voicing
+int cvSelect = 0;
 
 int noteRange = 38;
 int vOctCal = 48;
@@ -311,6 +316,8 @@ void setup(){
     oneOverGlideTime = 1.0 / (float) glideTime;
     noteRange = settings.noteRange;
     stacked = settings.stacked;
+    useVoicing = settings.useVoicing;
+    cvSelect = settings.cvSelect;
     vOct = settings.vOct;
     vOctCal = settings.vOctCal;
     
@@ -399,7 +406,7 @@ void setup(){
     //  quarter the coeff per note and quadruple the step size
     //  less chance of rounding error
     //  also need to quadruple the input value, done in checkInterface()
-    delay(2000);
+
     if (vOct) {
       Serial.print("Using vOct ");
       Serial.println(vOctCal);
@@ -825,12 +832,12 @@ void checkInterface(){
       chordCVRaw = chordCV * chordCVCoeff;
 
 
-      if(settings.useVoicing) {
-        if(settings.cvSelect == 0) {
+      if(useVoicing) {
+        if(cvSelect == 0) {
           chordQuant = chordRaw;
           voiceQuant = chordCVRaw;
           //Serial.println(" useVoicing and cvSelect == 0");
-        }else if(settings.cvSelect == 1) {
+        }else if(cvSelect == 1) {
           chordQuant = chordCVRaw;
           voiceQuant = chordRaw;
           //Serial.println(" useVoicing and cvSelect == 1");
