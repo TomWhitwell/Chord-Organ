@@ -378,6 +378,12 @@ void loop(){
     // CHECK BUTTON STATUS 
     resetHold = resetHold * resetButton;
 
+    if (longPress){
+      stacked = !stacked;
+      changed = true;
+      longPress = false;
+    }
+    
     if (shortPress){
         waveform++;
         waveform = waveform % (4 * waveformPages);
