@@ -38,6 +38,28 @@ The Root CV note range can be set from 12 to 72 semitones via the !RANGE setting
 
 To use 4 octaves.
 
+#### Add Voicing patterns
+
+Use `!VOICE`
+
+The Chord CV will control the voicing and the knob will control the chords.
+
+`!VOICE 1` will use CV for chords and knob for voicing.
+
+#### 1v/Oct tracking and tuning
+
+Use `!1VOCT` for the default note range of 38
+
+`!1VOCT 75` will give a spread between 39 and 40. 
+
+Get close using `!RANGE` and then fine tune with this.
+
+It does not tune the notes, just the size of the note jump vs CV voltage.
+
+| Num:  | 0  | 25 | 48 | 70 | 91 | 111| 130| 148| 166| 182| 198|
+|-------|----|----|----|----|----|----|----|----|----|----|----|
+| Note: | 36 | 37 | 38 | 39 | 40 | 41 | 42 | 43 | 44 | 45 | 46 |
+
 ### Config Generator / Firmware Binary
 To generate a settings file and download the latest 
 firmware binary please visit the [Config Generator Page](http://polyfather.com/chord_organ)
