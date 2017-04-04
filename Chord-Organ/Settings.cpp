@@ -13,7 +13,6 @@ void Settings::init(boolean hasSD) {
 		// Configure defaults
 		copyDefaults();
 	} else {
-	    File root = SD.open("/");
 	    if (SD.exists(_filename)) {
 	        read();
 	    }
@@ -26,7 +25,6 @@ void Settings::init(boolean hasSD) {
 	        read();
 	    };
 	}
-
 }
 
 void Settings::copyDefaults() {
@@ -60,6 +58,7 @@ void Settings::read() {
             if(numChords < 16) {
                 // Serial.println("Enter Chord");
                 state = CHORD;    
+                continue;
             }
         } else if(character == '!') {
             state = SETTING;
@@ -68,7 +67,10 @@ void Settings::read() {
         if(state == CHORD) {
             if (character == ',') {
             	#ifdef DEBUG_CHORDS
-                Serial.print("Note ");
+                Serial.print("Note");
+                Serial.print("\t");
+                Serial.print(settingValue);
+                Serial.print("\t");
                 Serial.println(settingValue.toInt());
                 #endif
                 notes[numChords][note] = settingValue.toInt();
@@ -76,7 +78,10 @@ void Settings::read() {
                 note++;
             } else if(character == ']') {
             	#ifdef DEBUG_CHORDS
-                Serial.print("Note ");
+                Serial.print("Note");
+                Serial.print("\t");
+                Serial.print(settingValue);
+                Serial.print("\t");
                 Serial.println(settingValue.toInt());
                 #endif
                 notes[numChords][note] = settingValue.toInt();
@@ -91,24 +96,24 @@ void Settings::read() {
 
         } else if(state == SETTING) {
             if(character == '\n') {
-                // 
+#ifdef DEBUG_CONFIG
                 Serial.print("Config ");
                 Serial.print(settingValue);
                 Serial.println(".");
+#endif
+                int spacePos = settingValue.indexOf(' ');
 
                 if(settingValue.startsWith("!WAVES")) {
                     extraWaves = true;
                 } else if(settingValue.startsWith("!GLIDE")) {
                     glide = true;
-                    int spacePos = settingValue.indexOf(' ');
                     if(spacePos > 0) {
                         glideTime = settingValue.substring(spacePos).toInt();
                         if(glideTime < 5) glideTime = 5;
-                        if(glideTime > 300) glideTime = 300;
+                        if(glideTime > 2000) glideTime = 2000;
                     }
 
                 } else if(settingValue.startsWith("!RANGE")) {
-                    int spacePos = settingValue.indexOf(' ');
                     if(spacePos > 0) {
                         noteRange = settingValue.substring(spacePos).toInt();
                         if(noteRange < 12) noteRange = 12;
@@ -116,10 +121,28 @@ void Settings::read() {
                     }
                 } else if(settingValue.startsWith("!STACK")) {
                 	stacked = true;
+                } else if(settingValue.startsWith("!FREEROOT")) {
+                	if(spacePos > 0) {
+                		String freetype = settingValue.substring(spacePos);
+#ifdef DEBUG_CONFIG
+                		Serial.print("Freetype ");
+                		Serial.println(freetype);
+#endif
+                		if(freetype.indexOf("KNOB") > 0) {
+                			quantiseRootPot = false;
+                		} else if(freetype.indexOf("BOTH") > 0) {
+                			quantiseRootCV = false;
+                			quantiseRootPot = false;
+                		}
+                	} else {
+                		quantiseRootCV = false;
+                	}
                 } else {
+#ifdef DEBUG_CONFIG
                     Serial.print("Unknown option:");
                     Serial.print(settingValue);
                     Serial.println(":");
+#endif
                 }
                 settingValue = "";
                 state = NONE;
@@ -199,4 +222,21 @@ void Settings::write() {
     // close the file:
     settingsFile.close();
     //Serial.println("Writing done.");	
+}
+
+void Settings::printDebug() {
+	Serial.println("-- Settings --");
+	Serial.print("Glide ");
+	Serial.println(glide);
+	Serial.print("Glide Time ");
+	Serial.println(glideTime);
+	Serial.print("Note Range ");
+	Serial.println(noteRange);
+	Serial.print("Quantise Root CV ");
+	Serial.println(quantiseRootCV);
+	Serial.print("Quantise Root Pot ");
+	Serial.println(quantiseRootPot);
+	Serial.print("Stacked ");
+	Serial.println(stacked);
+	Serial.println("-- End Settings --");
 }
