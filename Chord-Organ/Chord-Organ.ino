@@ -117,6 +117,12 @@ void loop(){
 	int notesUpdate = state & (ROOT_NOTE_UPDATE | CHORD_INDEX_CHANGED);
 	int buttonShortPress = state & BUTTON_SHORT_PRESS;
 
+	if(state & BUTTON_VERY_LONG_PRESS) {
+		// show all LEDs
+		ledControl.multi(0xF);
+		reBoot(50);
+	}
+
     if(state & BUTTON_LONG_PRESS) {
     	audioEngine.stackedVoices = !audioEngine.stackedVoices;
     	notesUpdate = true;

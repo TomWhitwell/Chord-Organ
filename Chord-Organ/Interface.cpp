@@ -45,11 +45,6 @@ uint16_t Interface::update(){
 		state |= ROOT_NOTE_UPDATE;
 	}
 
-	// Reset shortPress
-	if(shortPress) {
-		shortPress = false;
-	}
-
     return state;
 }
 
@@ -128,6 +123,7 @@ uint16_t Interface::updateButton() {
 	// Button pressed
 	if(waveButtonBounce.rose()) {
 		buttonTimer = 0;
+		buttonHeld = true;
 	}
 
     if(waveButtonBounce.fell()) {
@@ -137,8 +133,14 @@ uint16_t Interface::updateButton() {
         } else if(buttonTimer > LONG_PRESS_DURATION) {
         	buttonState |= BUTTON_LONG_PRESS;
         }
+        buttonHeld = false;
         buttonTimer = 0;
     }
 
+    if(buttonHeld) {
+    	if(buttonTimer > VERY_LONG_PRESS_DURATION) {
+			buttonState |= BUTTON_VERY_LONG_PRESS;
+		}
+    }
     return buttonState;
 }

@@ -13,18 +13,20 @@
 #define WAVEFORM_BUTTON 8 // Reset button
 
 // Update state flags
-#define ROOT_CV_CHANGED 	1
-#define ROOT_POT_CHANGED 	2
-#define ROOT_NOTE_CHANGED 	4
-#define CHORD_CV_CHANGED 	8
-#define CHORD_POT_CHANGED 	16
-#define CHORD_INDEX_CHANGED 32
-#define BUTTON_SHORT_PRESS	64
-#define BUTTON_LONG_PRESS	128
-#define ROOT_NOTE_UPDATE	256
+#define ROOT_CV_CHANGED 		1
+#define ROOT_POT_CHANGED 		2
+#define ROOT_NOTE_CHANGED 		4
+#define CHORD_CV_CHANGED 		8
+#define CHORD_POT_CHANGED 		16
+#define CHORD_INDEX_CHANGED 	32
+#define BUTTON_SHORT_PRESS		64
+#define BUTTON_LONG_PRESS		128
+#define BUTTON_VERY_LONG_PRESS	256
+#define ROOT_NOTE_UPDATE		512
 
 #define SHORT_PRESS_DURATION 10
 #define LONG_PRESS_DURATION 1000
+#define VERY_LONG_PRESS_DURATION 5000
 
 class Interface {
 public:
@@ -59,9 +61,7 @@ private:
 	Bounce waveButtonBounce;
 
 	elapsedMillis buttonTimer = 0;
-	elapsedMillis lockOut = 0;
-	boolean shortPress = false;
-	boolean longPress = false;
+	boolean buttonHeld = false;
 
 	int chordCount = 0;
 	int chordIndexOld = -1000;
