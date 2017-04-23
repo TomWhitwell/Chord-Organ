@@ -16,6 +16,8 @@
 #include "Interface.h"
 #include "Trig.h"
 
+//#define REQUIRE_SD_CARD
+
 //#define DEBUG_STARTUP
 
 // Debug Flags
@@ -52,7 +54,14 @@ Serial.println("Starting");
 
 	ledControl.init();
     trig.init();
-    settings.init(openSDCard());
+
+#ifdef REQUIRE_SD_CARD
+    openSDCard(true);
+    settings.init(true);
+#else
+    settings.init(openSDCard(false));
+#endif
+
 
     // Read waveform settings from EEPROM
     waveform = EEPROM.read(1234);
@@ -78,7 +87,7 @@ Serial.println("Starting");
     }
 }
 
-boolean openSDCard() {
+boolean openSDCard(boolean rebootIfNotFound) {
     int crashCountdown = 0;
     if (!(SD.begin(10))) {
         while (!(SD.begin(10))) {
@@ -88,7 +97,11 @@ boolean openSDCard() {
             delay(20);
             crashCountdown++;
             if (crashCountdown > 4) {
-                return false;
+            	if(rebootIfNotFound) {
+            		reBoot(0);
+            	} else {
+            		return false;
+            	}
             }
         }
     }
