@@ -7,6 +7,10 @@ void Interface::init(Settings* settings) {
     analogReadRes(ADC_BITS);
     pinMode(WAVEFORM_BUTTON, INPUT);
 
+	uint16_t bounceInterval = 5;
+	waveButtonBounce.attach(WAVEFORM_BUTTON);
+	waveButtonBounce.interval(bounceInterval);
+
     quantiseRootCV = settings->quantiseRootCV;
     quantiseRootPot = settings->quantiseRootPot;
     setChordCount(settings->numChords);
@@ -27,13 +31,13 @@ void Interface::setChordCount(int chords) {
 }
 
 // Return value is bit map of changes / state
-uint8_t Interface::update(){
+uint16_t Interface::update(){
 
-	uint8_t chordChanged = updateChordControls();
-	uint8_t rootChanged = updateRootControls();
-	uint8_t buttonState = updateButton();
+	uint16_t chordChanged = updateChordControls();
+	uint16_t rootChanged = updateRootControls();
+	uint16_t buttonState = updateButton();
 
-	uint8_t state = chordChanged | rootChanged | buttonState;
+	uint16_t state = chordChanged | rootChanged | buttonState;
 
 	if(quantiseRootCV && (state & ROOT_NOTE_CHANGED)) {
 		state |= ROOT_NOTE_UPDATE;
@@ -49,14 +53,14 @@ uint8_t Interface::update(){
     return state;
 }
 
-uint8_t Interface::updateChordControls() {
+uint16_t Interface::updateChordControls() {
 
 	chordCVInput.update();
 	chordPotInput.update();
 
 	chordIndex = (int) constrain(chordCVInput.currentValue + chordPotInput.currentValue, 0, chordCount - 1);
 
-	uint8_t chordChanged = 0;
+	uint16_t chordChanged = 0;
 
     if (chordIndex != chordIndexOld){
         chordChanged |= CHORD_INDEX_CHANGED;
@@ -67,9 +71,9 @@ uint8_t Interface::updateChordControls() {
 }
 
 // return bitmap of state of changes for CV, Pot and combined Note.
-uint8_t Interface::updateRootControls() {
+uint16_t Interface::updateRootControls() {
 
-	uint8_t change = 0;
+	uint16_t change = 0;
 
 	boolean cvChanged = rootCVInput.update();
 	boolean potChanged = rootPotInput.update();
@@ -117,17 +121,24 @@ uint8_t Interface::updateRootControls() {
 	return change;
 }
 
-uint8_t Interface::updateButton() {
-    int buttonState = digitalRead(WAVEFORM_BUTTON);
-    if (buttonTimer > SHORT_PRESS_DURATION && buttonState == 0 && lockOut > 999 ){
-        shortPress = true;
-    }
+uint16_t Interface::updateButton() {
+	waveButtonBounce.update();
+	uint16_t buttonState = 0;
 
-    buttonTimer = buttonTimer * buttonState;
-    if (buttonTimer > LONG_PRESS_DURATION){
-        longPress = true;
-        lockOut = 0;
+	// Button pressed
+	if(waveButtonBounce.rose()) {
+		buttonTimer = 0;
+	}
+
+    if(waveButtonBounce.fell()) {
+    	// button has been held down for some time
+        if (buttonTimer >= SHORT_PRESS_DURATION && buttonTimer < LONG_PRESS_DURATION){
+        	buttonState |= BUTTON_SHORT_PRESS;
+        } else if(buttonTimer > LONG_PRESS_DURATION) {
+        	buttonState |= BUTTON_LONG_PRESS;
+        }
         buttonTimer = 0;
     }
-    return shortPress ? BUTTON_SHORT_PRESS : 0;
+
+    return buttonState;
 }

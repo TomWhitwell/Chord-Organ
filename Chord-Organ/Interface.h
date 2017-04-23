@@ -3,6 +3,7 @@
 
 #include "AnalogInput.h"
 #include "Settings.h"
+#include <Bounce2.h>
 
 #define CHORD_POT_PIN 9 // pin for Chord pot
 #define CHORD_CV_PIN 6 // pin for Chord CV
@@ -19,7 +20,8 @@
 #define CHORD_POT_CHANGED 	16
 #define CHORD_INDEX_CHANGED 32
 #define BUTTON_SHORT_PRESS	64
-#define ROOT_NOTE_UPDATE	128
+#define BUTTON_LONG_PRESS	128
+#define ROOT_NOTE_UPDATE	256
 
 #define SHORT_PRESS_DURATION 10
 #define LONG_PRESS_DURATION 1000
@@ -47,12 +49,14 @@ public:
 		}
 
 	void init(Settings* settings);
-	uint8_t update();
+	uint16_t update();
 	void setChordCount(int chordCount);
 
 private:
 	AnalogInput chordCVInput;
 	AnalogInput chordPotInput;
+
+	Bounce waveButtonBounce;
 
 	elapsedMillis buttonTimer = 0;
 	elapsedMillis lockOut = 0;
@@ -65,9 +69,9 @@ private:
 	float rootNotePotOld = 0;
 	float rootNoteCVOld = 0;
 
-	uint8_t updateRootControls();
-	uint8_t updateChordControls();
-	uint8_t updateButton();
+	uint16_t updateRootControls();
+	uint16_t updateChordControls();
+	uint16_t updateButton();
 };
 
 #endif

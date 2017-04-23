@@ -22,6 +22,8 @@ Use `!STACK`
 
 The first 4 voices will be doubled with a 0.1% note offset.
 
+Also you can switch between stacked and normal with a long press of the waveform button.
+
 ##### Glide with time setting
 
 Use `!GLIDE` for default glide (50ms) or use 

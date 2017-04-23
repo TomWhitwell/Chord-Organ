@@ -16,6 +16,8 @@
 #include "Interface.h"
 #include "Trig.h"
 
+//#define DEBUG_STARTUP
+
 // Debug Flags
 //#define CHECK_CPU
 
@@ -39,6 +41,11 @@ Interface interface;
 Trig trig;
 
 void setup(){
+#ifdef DEBUG_STARTUP
+while( !Serial );
+Serial.println("Starting");
+#endif // DEBUG_STARTUP
+
     // SD CARD SETTINGS FOR MODULE
     SPI.setMOSI(7);
     SPI.setSCK(14);
@@ -90,12 +97,17 @@ boolean openSDCard() {
 
 void loop(){
 
-    uint8_t state = interface.update();
+    uint16_t state = interface.update();
 
     trig.update();
 
 	int notesUpdate = state & (ROOT_NOTE_UPDATE | CHORD_INDEX_CHANGED);
-	int buttonPressed = state & BUTTON_SHORT_PRESS;
+	int buttonShortPress = state & BUTTON_SHORT_PRESS;
+
+    if(state & BUTTON_LONG_PRESS) {
+    	audioEngine.stackedVoices = !audioEngine.stackedVoices;
+    	notesUpdate = true;
+    }
 
     if (notesUpdate) {
     	audioEngine.updateNotes(settings.notes[interface.chordIndex], interface.rootNoteCV);
@@ -106,11 +118,11 @@ void loop(){
         }
     }
 
-    if (buttonPressed){
+    if (buttonShortPress){
     	nextWaveform();
     }
 
-    if (buttonPressed || notesUpdate)  {
+    if (buttonShortPress || notesUpdate)  {
         trig.out(true);
     }
 
