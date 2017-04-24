@@ -20,7 +20,7 @@ class Settings {
 
     int lowNote = 36;
     int glideTime = 50;
-    uint8_t noteRange = 38;
+    uint8_t noteRange = 39;
     uint8_t numChords = 0;
 
     // Initialise Array with 255s, to identify unfilled elements when reading from SD card
