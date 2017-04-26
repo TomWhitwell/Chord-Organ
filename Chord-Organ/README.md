@@ -41,4 +41,3 @@ To use 4 octaves.
 ### Config Generator / Firmware Binary
 To generate a settings file and download the latest 
 firmware binary please visit the [Config Generator Page](http://polyfather.com/chord_organ)
-

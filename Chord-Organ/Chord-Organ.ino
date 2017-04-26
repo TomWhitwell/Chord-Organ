@@ -42,9 +42,13 @@
 #define MAX_FREQ 600
 
 #define SHORT_PRESS_DURATION 10
-#define LONG_PRESS_DURATION 1000
+#define LONG_PRESS_DURATION 900
+#define BANK_CHANGE_DURATION 350
 
-int chordCount = 16;
+const char* settingsFileName = "CHORDORG.TXT";
+
+//initialize bank index (0-15 possible)
+int currentBank = 0;
 
 // Target frequency of each oscillator
 float FREQ[SINECOUNT] = {
@@ -92,6 +96,7 @@ boolean rootChanged = false;
 
 Bounce resetCV = Bounce( RESET_CV, 40 ); 
 boolean resetButton = false;
+int buttonState;
 boolean resetCVRose;
 
 elapsedMillis resetHold;
@@ -99,9 +104,11 @@ elapsedMillis resetFlash;
 int updateCount = 0;
 
 elapsedMillis buttonTimer = 0;
+elapsedMillis bankTimer = 0;
 elapsedMillis lockOut = 0;
 boolean shortPress = false;
 boolean longPress = false;
+boolean prevBankButton = false;
 elapsedMillis pulseOutTimer = 0;
 uint32_t flashTime = 10;
 boolean flashing = false;
@@ -194,9 +201,9 @@ AudioConnection          patchCord12(envelope1, dac1);
 // Pointers to waveforms
 AudioSynthWaveform* oscillator[8];
 
-Settings settings("CHORDORG.TXT");
+Settings settings(settingsFileName);
 
-void setup(){
+void setup() {
     pinMode(BANK_BUTTON,INPUT);
     pinMode(RESET_BUTTON, INPUT);
     pinMode(RESET_CV, INPUT); 
@@ -217,7 +224,7 @@ void setup(){
     oscillator[6] = &waveform7;
     oscillator[7] = &waveform8;
 
-    for(int i=0;i<128;i++) {
+    for (int i = 0; i < 128; i++) {
         MIDI_TO_FREQ[i] = numToFreq(i);
     }
 
@@ -225,7 +232,6 @@ void setup(){
   while( !Serial );
 
     Serial.println("Starting");
-    // ledWrite(waveform);
 #endif // DEBUG_STARTUP
 
     // SD CARD SETTINGS FOR MODULE 
@@ -241,8 +247,8 @@ void setup(){
 #endif
 
     if (waveform < 0) waveform = 0;
-    ledWrite(waveform % 4);
-
+    ledWriteBank(currentBank);
+    
     // OPEN SD CARD 
     boolean hasSD = openSDCard();
 
@@ -252,10 +258,8 @@ void setup(){
 #endif    
     // READ SETTINGS FROM SD CARD 
     settings.init(hasSD);
-
-    chordCount = settings.numChords;
     waveformPages = settings.extraWaves ? 3 : 1;
-    if(waveformPages > 1) {
+    if (waveformPages > 1) {
         waveformPage = waveform >> 2;
     } else {
         // If we read a custom waveform index from EEPROM
@@ -276,8 +280,6 @@ void setup(){
     Serial.println(waveform);
 
     Serial.println("-- Settings --");
-    Serial.print("Chord Count ");
-    Serial.println(chordCount);
     Serial.print("Waveform Pages ");
     Serial.println(waveformPages);
     Serial.print("Glide ");
@@ -292,11 +294,11 @@ void setup(){
 #endif
 
     // Setup audio
-    for(int i=0;i<SINECOUNT;i++) {
+    for (int i = 0; i < SINECOUNT; i++) {
         oscillator[i]->pulseWidth(0.5);
     }
 
-    for(int m=0;m<4;m++) {
+    for (int m = 0; m < 4; m++) {
         mixer1.gain(m,0.25);
         mixer2.gain(m,0.25);
     }
@@ -312,7 +314,7 @@ void setup(){
     envelope1.release(1);
     envelope1.noteOn();
 
-    if(waveformPage == 0) {
+    if (waveformPage == 0) {
         // First page is built in waveforms
         setWaveformType(wave_type[waveform]);
     } else {
@@ -354,15 +356,15 @@ boolean openSDCard() {
     return true;
 }
 
-void loop(){
+void loop() {
 
     checkInterface();
 
     if (changed) {
-
+        
         // Serial.println("Changed");
         updateAmpAndFreq();
-        if(glide) {
+        if (glide) {
             glideTimer = 0;
             gliding = true;
             // Serial.println("Start glide");
@@ -378,7 +380,40 @@ void loop(){
     // CHECK BUTTON STATUS 
     resetHold = resetHold * resetButton;
 
-    if (shortPress){
+    if (longPress) {
+        //set the chords to the next group
+        if (bankTimer >= BANK_CHANGE_DURATION)
+        {
+            currentBank++;
+            
+            if (currentBank > (settings.chordFileCount - 1)) {
+              currentBank = 0;
+            }
+            
+            //show the LED for the current bank
+            ledWriteBank(currentBank);
+            
+            updateAmpAndFreq();
+            changed = true;
+            
+            //reset bank timer
+            bankTimer = 0;
+        }
+        
+        getAndSetButtonState();
+        //On button up, stop the long press logic
+        if (buttonState == 0)
+        {
+          updateAmpAndFreq();
+          changed = true;
+          longPress = false;
+          prevBankButton = false;
+          lockOut = 0;
+          buttonTimer = 0;
+        }
+    }
+
+    if (shortPress) {
         waveform++;
         waveform = waveform % (4 * waveformPages);
         selectWaveform(waveform);
@@ -386,7 +421,7 @@ void loop(){
         shortPress = false;
     }
 
-    if (changed)  {
+    if (changed) {
         // Serial.println("Trig Out");
         pulseOutTimer = 0;
         flashing = true;
@@ -402,16 +437,14 @@ void loop(){
         changed = false;
     }
 
-    if(gliding) {
-        if(glideTimer >= glideTime) {
+    if (gliding) {
+        if (glideTimer >= glideTime) {
             gliding = false;
         }
         AudioNoInterrupts();
         updateFrequencies();
         AudioInterrupts();
     }
-
-    updateWaveformLEDs();
 
     if (flashing && (pulseOutTimer > flashTime)) {
         digitalWrite (RESET_LED, LOW);
@@ -422,18 +455,25 @@ void loop(){
 }
 
 void updateAmpAndFreq() {
-    int16_t* chord = settings.notes[chordQuant];
+    int16_t* chord = settings.chordBanks[currentBank][chordQuant];
 
+    #ifdef DEBUG_MODE
+    Serial.print("Current Bank is: ");
+    Serial.println(currentBank);
+    Serial.print("Current Chord's first note is: ");
+    Serial.println(chord[0]);
+    #endif
+    
     int noteNumber;
     int voiceCount = 0;
     int halfSinecount = SINECOUNT>>1;
 
-    if(stacked) {
-        for(int i=0;i < halfSinecount;i++) {
+    if (stacked) {
+        for (int i = 0; i < halfSinecount; i++) {
             if (chord[i] != 255) {
                 noteNumber = rootQuant + chord[i];
-                if(noteNumber < 0) noteNumber = 0;
-                if(noteNumber > 127) noteNumber = 127;
+                if (noteNumber < 0) noteNumber = 0;
+                if (noteNumber > 127) noteNumber = 127;
                 float newFreq = MIDI_TO_FREQ[noteNumber];
 
                 FREQ[i] = newFreq;
@@ -449,11 +489,11 @@ void updateAmpAndFreq() {
             }            
         }
     } else {
-        for(int i = 0; i< SINECOUNT; i++){
+        for (int i = 0; i < SINECOUNT; i++) {
             if (chord[i] != 255) {
                 noteNumber = rootQuant + chord[i];
-                if(noteNumber < 0) noteNumber = 0;
-                if(noteNumber > 127) noteNumber = 127;
+                if (noteNumber < 0) noteNumber = 0;
+                if (noteNumber > 127) noteNumber = 127;
                 float newFreq = MIDI_TO_FREQ[noteNumber];
 
                 // TODO : Allow option to choose between jump from current or new?
@@ -477,24 +517,24 @@ void updateAmpAndFreq() {
     float ampPerVoice = AMP_PER_VOICE[voiceCount-1];
     float totalAmp = 0;
 
-    if(stacked) {
-        for (int i = 0; i < halfSinecount; i++){
+    if (stacked) {
+        for (int i = 0; i < halfSinecount; i++) {
             if (chord[i] != 255) {
                 AMP[i] = ampPerVoice;
                 AMP[i + halfSinecount] = ampPerVoice; 
                 totalAmp += ampPerVoice;
             }
-            else{
+            else {
                 AMP[i] = 0.0;   
             }
         }        
     } else {
-        for (int i = 0; i< SINECOUNT; i++){
+        for (int i = 0; i < SINECOUNT; i++) {
             if (chord[i] != 255) {
                 AMP[i] = ampPerVoice;
                 totalAmp += ampPerVoice;
             }
-            else{
+            else {
                 AMP[i] = 0.0;   
             }
         }        
@@ -503,11 +543,10 @@ void updateAmpAndFreq() {
 
 void selectWaveform(int waveform) {
     waveformPage = waveform >> 2;
-    if(waveformPage > 0) {
+    if (waveformPage > 0) {
         flashingWave = true;
         waveformIndicatorTimer = 0;
     }  
-    ledWrite(waveform % 4);
     EEPROM.write(1234, waveform);
 
     #ifdef DEBUG_MODE
@@ -518,7 +557,7 @@ void selectWaveform(int waveform) {
     #endif // DEBUG_MODE
 
     AudioNoInterrupts();
-    if(waveformPage == 0) {
+    if (waveformPage == 0) {
         setWaveformType(wave_type[waveform]);
     } else {
         setupCustomWaveform(waveform);    
@@ -527,7 +566,7 @@ void selectWaveform(int waveform) {
 }
 
 void setWaveformType(short waveformType) {
-    for(int i=0;i<SINECOUNT;i++) {
+    for (int i = 0; i < SINECOUNT; i++) {
         oscillator[i]->begin(1.0,FREQ[i],waveformType);
     }   
 }
@@ -536,7 +575,7 @@ void setupCustomWaveform(int waveselect) {
     waveselect = (waveselect - 4) % 8;
 
     const int16_t* wave = waveTables[waveselect];
-    for(int i=0;i<SINECOUNT;i++) {
+    for (int i = 0; i < SINECOUNT; i++) {
         oscillator[i]->arbitraryWaveform(wave, MAX_FREQ);
     }
 
@@ -545,12 +584,12 @@ void setupCustomWaveform(int waveselect) {
 
 void updateWaveformLEDs() {
     // Flash waveform LEDs for custom waves
-    if(waveformPage > 0) {
+    if (waveformPage > 0) {
         uint32_t blinkTime = 100 + ((waveformPage - 1) * 300);
-        if(waveformIndicatorTimer >= blinkTime) {
+        if (waveformIndicatorTimer >= blinkTime) {
             waveformIndicatorTimer = 0;
             flashingWave = !flashingWave;
-            if(flashingWave) {
+            if (flashingWave) {
                 ledWrite(waveform % 4);
             } else {
                 ledWrite(15);
@@ -561,10 +600,10 @@ void updateWaveformLEDs() {
 
 void updateFrequencies() {
 
-    if(gliding) {
+    if (gliding) {
         // TODO : Replace division with reciprocal multiply.
         float dt = 1.0 - (glideTimer * oneOverGlideTime);
-        if(dt < 0.0) {
+        if (dt < 0.0) {
             dt = 0.0;
             gliding = false;
         }
@@ -573,18 +612,18 @@ void updateFrequencies() {
         // Serial.print(" ");
         // Serial.println(glideTimer);
 
-        for(int i=0;i<SINECOUNT;i++) {
+        for (int i = 0; i < SINECOUNT; i++) {
             currentFrequency[i] = FREQ[i] - (deltaFrequency[i] * dt);
             oscillator[i]->frequency(currentFrequency[i]);
         }
     } else {
-        for(int i=0;i<SINECOUNT;i++) {
+        for (int i = 0; i < SINECOUNT; i++) {
             oscillator[i]->frequency(FREQ[i]);
         }
     }
 }
 
-void updateAmps(){
+void updateAmps() {
     float waveAmp = WAVEFORM_AMP[waveform];
     mixer1.gain(0,AMP[0] * waveAmp);
     mixer1.gain(1,AMP[1] * waveAmp);
@@ -597,15 +636,25 @@ void updateAmps(){
 }
 
 // WRITE A 4 DIGIT BINARY NUMBER TO LED0-LED3 
-void ledWrite(int n){
+void ledWrite(int n) {
     digitalWrite(LED3, HIGH && (n==0));
     digitalWrite(LED2, HIGH && (n==1));
     digitalWrite(LED1, HIGH && (n==2));
     digitalWrite(LED0, HIGH && (n==3)); 
 }
 
-void checkInterface(){
+// WRITE A 4 DIGIT BINARY NUMBER TO LED0-LED3 FOR BANK CHANGE
+void ledWriteBank(int n) {
+  digitalWrite(LED0, HIGH && (n & B00001000));
+  digitalWrite(LED1, HIGH && (n & B00000100));
+  digitalWrite(LED2, HIGH && (n & B00000010));
+  digitalWrite(LED3, HIGH && (n & B00000001)); 
+}
 
+void checkInterface() {
+    //get button state and save last state
+    getAndSetButtonState();
+    
     // Read pots + CVs
     int chordPot = analogRead(CHORD_POT_PIN); 
     int chordCV = analogRead(CHORD_CV_PIN); 
@@ -623,7 +672,7 @@ void checkInterface(){
     // Apply hysteresis and filtering to prevent jittery quantization 
     // Thanks to Matthias Puech for this code 
 
-    if ((chordRaw > chordRawOld + CHANGE_TOLERANCE) || (chordRaw < chordRawOld - CHANGE_TOLERANCE)){
+    if ((chordRaw > chordRawOld + CHANGE_TOLERANCE) || (chordRaw < chordRawOld - CHANGE_TOLERANCE)) {
         chordRawOld = chordRaw;    
     }
     else {
@@ -632,7 +681,7 @@ void checkInterface(){
     }
 
     // Do Pot and CV separately
-    if ((rootPot > rootPotOld + CHANGE_TOLERANCE) || (rootPot < rootPotOld - CHANGE_TOLERANCE)){
+    if ((rootPot > rootPotOld + CHANGE_TOLERANCE) || (rootPot < rootPotOld - CHANGE_TOLERANCE)) {
         rootPotOld = rootPot;
         rootChanged = true;
     }
@@ -640,7 +689,7 @@ void checkInterface(){
         rootPotOld += (rootPot - rootPotOld) >>5;
         rootPot = rootPotOld;
     }
-    if ((rootCV > rootCVOld + CHANGE_TOLERANCE) || (rootCV < rootCVOld - CHANGE_TOLERANCE)){
+    if ((rootCV > rootCVOld + CHANGE_TOLERANCE) || (rootCV < rootCVOld - CHANGE_TOLERANCE)) {
         rootCVOld = rootCV;
         rootChanged = true;
     }
@@ -649,57 +698,66 @@ void checkInterface(){
         rootCV = rootCVOld;
     }
 
-    chordQuant = map(chordRaw, 0, ADC_MAX_VAL, 0, chordCount);
-    if (chordQuant != chordQuantOld){
+    chordQuant = map(chordRaw, 0, ADC_MAX_VAL, 0, settings.numChords[currentBank]);
+    if (chordQuant != chordQuantOld) {
         changed = true; 
         chordQuantOld = chordQuant;    
     }
 
     // Map ADC reading to Note Numbers
     int rootCVQuant = LOW_NOTE;
-    if(rootCV > rootClampLow) {
+    if (rootCV > rootClampLow) {
       rootCVQuant = ((rootCV - rootClampLow) * rootMapCoeff) + LOW_NOTE + 1;
     }
     // Use Pot as transpose for CV
     int rootPotQuant = map(rootPot,0,ADC_MAX_VAL,0,48);
     rootQuant = rootCVQuant + rootPotQuant;
-    if (rootQuant != rootQuantOld){
+    if (rootQuant != rootQuantOld) {
         changed = true; 
         rootQuantOld = rootQuant;  
     }
 
 #ifdef DEBUG_MODE
-   if(rootChanged) {
+   if (rootChanged) {
         // printRootInfo(rootPot,rootCV);
    }
 #endif
 
     //    resetSwitch.update();
     //    resetButton = resetSwitch.read();
-
-    int buttonState = digitalRead(RESET_BUTTON);
-    if (buttonTimer > SHORT_PRESS_DURATION && buttonState == 0 && lockOut > 999 ){
-        shortPress = true;    
+    if (buttonTimer > SHORT_PRESS_DURATION && buttonState == 0 && lockOut > 999 ) {
+        shortPress = true;
+        //cancel long press
+        longPress = false;
     }
 
     buttonTimer = buttonTimer * buttonState; 
-    if (buttonTimer > LONG_PRESS_DURATION){
+    if (buttonTimer > LONG_PRESS_DURATION) {
         longPress = true;
         lockOut = 0;
-        buttonTimer = 0;
     }
 
-    if (!flashing){
+    if (!flashing) {
         resetCV.update();
         resetCVRose = resetCV.rose();
         if (resetCVRose) resetFlash = 0; 
 
         digitalWrite(RESET_LED, (resetFlash<20));
     }
-
 }
 
-void reBoot(int delayTime){
+void getAndSetButtonState() {
+    //get button state and save last state
+    buttonState = digitalRead(RESET_BUTTON);
+    if (buttonState == 1) {
+      prevBankButton = true;
+    }
+    else {
+      prevBankButton = false;
+    }
+}
+
+void reBoot(int delayTime) {
     if (delayTime > 0)
         delay (delayTime);
     WRITE_RESTART(0x5FA0004);
@@ -714,13 +772,13 @@ void printRootInfo(int rootPot, int rootCV) {
     Serial.println(rootQuant);
 }
 
-void printPlaying(){
+void printPlaying() {
     Serial.print("Chord: ");
     Serial.print(chordQuant);
     Serial.print(" Root: ");
     Serial.print(rootQuant);
     Serial.print(" ");
-    for(int i = 0; i<SINECOUNT; i++){
+    for (int i = 0; i < SINECOUNT; i++) {
         Serial.print(i);
         Serial.print(": ");
         Serial.print (FREQ[i]);
