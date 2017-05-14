@@ -1,7 +1,7 @@
 #include <SD.h>
 #include "Settings.h"
 
-// #define DEBUG_CHORDS
+//#define DEBUG_CHORDS
 
 Settings::Settings(const char* filename) {
   //create an array of filenames, detect them in the SD card
@@ -26,7 +26,7 @@ void Settings::init(boolean hasSD) {
       root.rewindDirectory();
       boolean filesFound = scanDirectory(root);
       if (filesFound == false) {
-  #ifdef DEBUG_MODE
+  #ifdef DEBUG_CHORDS
           Serial.println("Settings file not found, writing new settings");
   #endif
           //Write defaults
@@ -55,7 +55,7 @@ boolean Settings::scanDirectory(File dir) {
 
     if (checkExt && checkName) {
       
-      #ifdef DEBUG_MODE
+      #ifdef DEBUG_CHORDS
       Serial.print("Chord file found!: ");
       Serial.println(fileName);
       #endif
@@ -67,7 +67,7 @@ boolean Settings::scanDirectory(File dir) {
         return anyChordFilesFound;
       }    
       
-      #ifdef DEBUG_MODE
+      #ifdef DEBUG_CHORDS
       Serial.print("Total Banks: ");
       Serial.println(chordFileCount);
       #endif
@@ -118,7 +118,8 @@ void Settings::read(const char* fn) {
         if (character == '[') {
             if(numChords[chordFileCount] < 16) {
                 // Serial.println("Enter Chord");
-                state = CHORD;    
+                state = CHORD;
+                continue;   
             }
         } else if(character == '!') {
             state = SETTING;
@@ -145,7 +146,14 @@ void Settings::read(const char* fn) {
                 // Serial.println("End Chord");
                 state = NONE;
             } else {
-                settingValue += character;     
+                settingValue += character;
+
+                #ifdef DEBUG_CHORDS
+                Serial.print("Character: ");
+                Serial.println(character);
+                Serial.print("SettingValue: ");
+                Serial.println(settingValue);
+                #endif  
             }
 
         } else if (state == SETTING) {
