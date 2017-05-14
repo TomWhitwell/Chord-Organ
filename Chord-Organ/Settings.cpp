@@ -4,42 +4,99 @@
 //#define DEBUG_CHORDS
 
 Settings::Settings(const char* filename) {
+  //create an array of filenames, detect them in the SD card
 	_filename = filename;
 }
 
 void Settings::init(boolean hasSD) {
+  //init chord bank values
+    for (int i = 0; i < 16; i++) {
+      for (int j = 0; j < 16; j++) {
+        for (int k = 0; k < 8; k++) {
+          chordBanks[i][j][k] = 255;
+        }
+      }
+    }
+    
+	if (!hasSD) {
+    // Configure defaults
+    copyDefaults();
+  } else {
+      File root = SD.open("/");
+      root.rewindDirectory();
+      boolean filesFound = scanDirectory(root);
+      if (filesFound == false) {
+  #ifdef DEBUG_CHORDS
+          Serial.println("Settings file not found, writing new settings");
+  #endif
+          //Write defaults
+          write();
+          read(_filename);
+      }
 
-	if(!hasSD) {
-		// Configure defaults
-		copyDefaults();
-	} else {
-	    File root = SD.open("/");
-	    if (SD.exists(_filename)) {
-	        read();
-	    }
-	    else { 
-	      
-	#ifdef DEBUG_MODE
-	        Serial.println("Settings file not found, writing new settings");
-	#endif
-	        write();
-	        read();
-	    };
-	}
+      root.close();
+  }
+}
 
+boolean Settings::scanDirectory(File dir) {
+  boolean anyChordFilesFound = false;
+  while(true) {
+    File entry =  dir.openNextFile();
+    if (!entry) {
+      // no more files
+      return anyChordFilesFound;
+    }
+    String fileName = (String)entry.name();
+    entry.close();
+    char fn[sizeof(fileName)];
+    fileName.trim().toCharArray(fn, sizeof(fn));
+    boolean checkExt = fileName.endsWith(".TXT");
+    boolean checkName = fileName.startsWith("CHORD");
+
+    if (checkExt && checkName) {
+      
+      #ifdef DEBUG_CHORDS
+      Serial.print("Chord file found!: ");
+      Serial.println(fileName);
+      #endif
+      
+      anyChordFilesFound = true;
+      
+      if (chordFileCount > 15) {
+        //stop scanning if the file number is out of bounds
+        return anyChordFilesFound;
+      }    
+      
+      #ifdef DEBUG_CHORDS
+      Serial.print("Total Banks: ");
+      Serial.println(chordFileCount);
+      #endif
+      
+      //parse the current file, put it into the bank defined by chordFileCount
+      read(fn);
+      chordFileCount++;
+    }
+      
+  }
+  return anyChordFilesFound;
 }
 
 void Settings::copyDefaults() {
-	for(int i=0;i<16;i++) {
-		for(int a=0;a<8;a++) {
-			notes[i][a] = defaultNotes[i][a];
-		}
-	}
-	numChords = 16;
+  for (int i = 0; i < 16; i++) {
+      for (int j = 0; j < 16; j++) {
+        for (int k = 0; k < 8; k++) {
+          chordBanks[i][j][k] = defaultNotes[j][k];
+        }
+      }
+  }
+
+  for (int i = 0; i < 16; i++) {
+    numChords[i] = 16;
+  }
 }
 
-void Settings::read() {
-    numChords = 0;
+void Settings::read(const char* fn) {
+    numChords[chordFileCount] = 0;
 
     char character;
     int note = 0;
@@ -50,16 +107,19 @@ void Settings::read() {
     int SETTING = 2;
     int state = NONE;
 
-    settingsFile = SD.open(_filename);
+    //TO DO: read each file name in a loop here, then set chordBanks to the extracted notes
+
+    settingsFile = SD.open(fn,FILE_READ);
 
     while (settingsFile.available()) {
         
         character = settingsFile.read();
 
         if (character == '[') {
-            if(numChords < 16) {
+            if(numChords[chordFileCount] < 16) {
                 // Serial.println("Enter Chord");
-                state = CHORD;    
+                state = CHORD;
+                continue;   
             }
         } else if(character == '!') {
             state = SETTING;
@@ -71,50 +131,57 @@ void Settings::read() {
                 Serial.print("Note ");
                 Serial.println(settingValue.toInt());
                 #endif
-                notes[numChords][note] = settingValue.toInt();
+                chordBanks[chordFileCount][numChords[chordFileCount]][note] = settingValue.toInt();
                 settingValue = "";   
                 note++;
-            } else if(character == ']') {
+            } else if (character == ']') {
             	#ifdef DEBUG_CHORDS
                 Serial.print("Note ");
                 Serial.println(settingValue.toInt());
                 #endif
-                notes[numChords][note] = settingValue.toInt();
+                chordBanks[chordFileCount][numChords[chordFileCount]][note] = settingValue.toInt();
                 settingValue = "";
-                numChords++;
+                numChords[chordFileCount]++;
                 note = 0;
                 // Serial.println("End Chord");
                 state = NONE;
             } else {
-                settingValue += character;     
+                settingValue += character;
+
+                #ifdef DEBUG_CHORDS
+                Serial.print("Character: ");
+                Serial.println(character);
+                Serial.print("SettingValue: ");
+                Serial.println(settingValue);
+                #endif  
             }
 
-        } else if(state == SETTING) {
-            if(character == '\n') {
+        } else if (state == SETTING) {
+            if (character == '\n') {
                 // 
                 Serial.print("Config ");
                 Serial.print(settingValue);
                 Serial.println(".");
 
-                if(settingValue.startsWith("!WAVES")) {
+                if (settingValue.startsWith("!WAVES")) {
                     extraWaves = true;
-                } else if(settingValue.startsWith("!GLIDE")) {
+                } else if (settingValue.startsWith("!GLIDE")) {
                     glide = true;
                     int spacePos = settingValue.indexOf(' ');
-                    if(spacePos > 0) {
+                    if (spacePos > 0) {
                         glideTime = settingValue.substring(spacePos).toInt();
-                        if(glideTime < 5) glideTime = 5;
-                        if(glideTime > 300) glideTime = 300;
+                        if (glideTime < 5) glideTime = 5;
+                        if (glideTime > 300) glideTime = 300;
                     }
 
-                } else if(settingValue.startsWith("!RANGE")) {
+                } else if (settingValue.startsWith("!RANGE")) {
                     int spacePos = settingValue.indexOf(' ');
-                    if(spacePos > 0) {
+                    if (spacePos > 0) {
                         noteRange = settingValue.substring(spacePos).toInt();
-                        if(noteRange < 12) noteRange = 12;
-                        if(noteRange > 72) noteRange = 72;
+                        if (noteRange < 12) noteRange = 12;
+                        if (noteRange > 72) noteRange = 72;
                     }
-                } else if(settingValue.startsWith("!STACK")) {
+                } else if (settingValue.startsWith("!STACK")) {
                 	stacked = true;
                 } else {
                     Serial.print("Unknown option:");
@@ -127,12 +194,12 @@ void Settings::read() {
                 settingValue += character;
             }
         }
-    }   
+    }  
     settingsFile.close();
 }
 
 // converting string to Float
-float Settings::toFloat(String settingValue){
+float Settings::toFloat(String settingValue) {
     char floatbuf[settingValue.length()];
     settingValue.toCharArray(floatbuf, sizeof(floatbuf));
     float f = atof(floatbuf);
@@ -143,7 +210,7 @@ float Settings::toFloat(String settingValue){
 // 1 = true
 // 0 = false
 boolean Settings::toBoolean(String settingValue) {
-    if(settingValue.toInt()==1){
+    if (settingValue.toInt() == 1) {
         return true;
     } 
     else {
@@ -195,7 +262,6 @@ void Settings::write() {
     settingsFile.println("15 [-12,-12,0,0,0] Sub Octave");
     settingsFile.println("16 [-12,0,0,12,24] 2 up 1 down octaves");
 
-    //
     // close the file:
     settingsFile.close();
     //Serial.println("Writing done.");	

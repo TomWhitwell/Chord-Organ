@@ -1,74 +1,29 @@
+#include <SD.h>
 #ifndef Settings_h
 #define Settings_h
-
-#include <SD.h>
 
 class Settings {
   public:
     Settings(const char* filename);
     void init(boolean hasSD);
-    void read();
+    boolean scanDirectory(File dir);
+    void read(const char* fn);
     void write();
-	float toFloat(String settingValue);
-	boolean toBoolean(String settingValue);
+    
+  	float toFloat(String settingValue);
+  	boolean toBoolean(String settingValue);
 
-	boolean stacked = false;
+    const char* FILE_TYPE = "TXT";
+
+	  boolean stacked = false;
     boolean extraWaves = false;
     boolean glide = false;
     int glideTime = 50;
     uint8_t noteRange = 38;
-    uint8_t numChords = 0;
-	// Initialise Array with 255s, to identify unfilled elements when reading from SD card 
-	int16_t notes[16][8] = {
-	    {        
-	        255,255,255,255,255,255,255,255}
-	    ,    
-	    {        
-	        255,255,255,255,255,255,255,255}
-	    ,    
-	    {   
-	        255,255,255,255,255,255,255,255}
-	    ,    
-	    {
-	        255,255,255,255,255,255,255,255}
-	    ,    
-	    {
-	        255,255,255,255,255,255,255,255}
-	    ,    
-	    {
-	        255,255,255,255,255,255,255,255}
-	    ,    
-	    {
-	        255,255,255,255,255,255,255,255}
-	    ,    
-	    {
-	        255,255,255,255,255,255,255,255}
-	    ,    
-	    {
-	        255,255,255,255,255,255,255,255}
-	    ,    
-	    {
-	        255,255,255,255,255,255,255,255}
-	    ,    
-	    {
-	        255,255,255,255,255,255,255,255}
-	    ,    
-	    {
-	        255,255,255,255,255,255,255,255}
-	    ,    
-	    {
-	        255,255,255,255,255,255,255,255}
-	    ,    
-	    {
-	        255,255,255,255,255,255,255,255}
-	    ,    
-	    {
-	        255,255,255,255,255,255,255,255}
-	    ,    
-	    {
-	        255,255,255,255,255,255,255,255}
-	    ,    
-	};
+    int numChords[16] = {15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15};
+    int16_t chordBanks[16][16][8];
+    int chordFileCount = 0;
+    
 	int16_t defaultNotes[16][8] = {
 	    {        
 	        0,4,7,12,0,255,255,255}
@@ -118,7 +73,8 @@ class Settings {
 	    {
 	        -12,0,0,12,24,255,255,255}
 	    ,    
-	};	
+	};
+  
   private:
     const char* _filename;
     File settingsFile;
