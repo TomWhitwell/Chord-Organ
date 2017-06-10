@@ -33,9 +33,6 @@ public:
 	boolean quantiseRootCV = true;
 	boolean quantiseRootPot = true;
 
-	AnalogInput rootCVInput;
-	AnalogInput rootPotInput;
-
 	float rootNoteCV = 36;
 	float rootNotePot = 36;
 	float rootNote = 36;
@@ -55,6 +52,9 @@ public:
 	void setChordCount(int chordCount);
 
 private:
+	AnalogInput rootCVInput;
+	AnalogInput rootPotInput;
+
 	AnalogInput chordCVInput;
 	AnalogInput chordPotInput;
 

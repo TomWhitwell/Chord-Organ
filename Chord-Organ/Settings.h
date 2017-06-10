@@ -18,8 +18,8 @@ class Settings {
     boolean quantiseRootCV = true;
     boolean quantiseRootPot = true;
 
-    int lowNote = 36;
-    int glideTime = 50;
+    uint8_t lowNote = 36;
+    uint16_t glideTime = 50;
     uint8_t noteRange = 39;
     uint8_t numChords = 0;
 

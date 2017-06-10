@@ -11,23 +11,21 @@ void Interface::init(Settings* settings) {
 	waveButtonBounce.attach(WAVEFORM_BUTTON);
 	waveButtonBounce.interval(bounceInterval);
 
-    quantiseRootCV = settings->quantiseRootCV;
-    quantiseRootPot = settings->quantiseRootPot;
     setChordCount(settings->numChords);
 
+    quantiseRootCV = settings->quantiseRootCV;
+    quantiseRootPot = settings->quantiseRootPot;
+
     float lowNote = settings->lowNote + 0.5;
-    rootCVInput.setRange(lowNote, lowNote + settings->noteRange);
-    rootPotInput.setRange(0.0,48);
-    rootCVInput.useSmoothing(quantiseRootCV);
-    rootPotInput.useSmoothing(quantiseRootPot);
-    rootCVInput.setChangeTolerance(rootCVInput.getRatio() * 0.3);
+    rootCVInput.setRange(lowNote, lowNote + settings->noteRange, settings->quantiseRootCV);
+    rootPotInput.setRange(0.0,48, settings->quantiseRootPot);
 }
 
 void Interface::setChordCount(int chords) {
 
 	chordCount = chords;
-    chordCVInput.setRange(0.0,(float)chords);
-    chordPotInput.setRange(0.0,(float)chords);
+    chordCVInput.setRange(0.0,(float)chords, true);
+    chordPotInput.setRange(0.0,(float)chords, true);
 }
 
 // Return value is bit map of changes / state

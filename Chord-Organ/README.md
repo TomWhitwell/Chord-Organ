@@ -8,6 +8,8 @@
 
 Decoupled Root CV and Root Knob so they both use their own full range
 
+The module can be rebooted by holding the WAVEFORM button for 5 seconds.
+
 ### Extra Features (Requires config file settings)
 
 ##### 8 Extra Waves

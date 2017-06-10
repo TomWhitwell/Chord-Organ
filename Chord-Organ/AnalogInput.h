@@ -4,41 +4,41 @@
 #include "Arduino.h"
 
 #define ADC_BITS 13
-#define ADC_MAX_VALUE 8192
+#define ADC_MAX_VALUE (1 << ADC_BITS)
 
 class AnalogInput {
 	public:
 		AnalogInput(uint pinIndex);
-		// Update with hysteresis and filtering. Return changed flag
 		boolean update();
-		// Update using raw input value. Always returns true.
-		boolean updateRaw();
-		void setRange(float outLow, float outHigh);
-		void setChangeTolerance(int tolerance);
-		void setSmoothPower(int power);
-		void useSmoothing(boolean s);
+		void setRange(float outLow, float outHigh, boolean quantise);
+		void setAverage(boolean avg);
+		void setSmoothSteps(int steps);
+
 		void printDebug();
 		float getRatio();
 		float currentValue = 0.0;
+		int32_t inputValue = 0;
+		uint16_t borderThreshold = 16;
 	private:
 		int pin;
 		float outputLow = 0.0;
 		float outputHigh = 1.0;
 		float inToOutRatio = 0.0;
 		float inverseRatio = 0.0;
-		int inputValue = 0;
+
 		// Set out of range to trigger a change status on first call.
-		int oldInputValue = -1000;
-		int valueAtLastChange = -1000;
-		boolean smooth = false;
+		int32_t oldInputValue = -1000;
+		int32_t valueAtLastChange = -1000;
 
-		// If the absolute input delta is greater than this then use the input value
-		// otherwise the old value is filtered towards the new value
-		int changeTolerance = 16;
+		// Use hysteresis thresholds at value boundaries
+		boolean hysteresis = false;
 
-		// If input doesn't change past 'changeTolerance' level then the
-		// input delta is shifted left by 'smoothPower' bits added to the old value
-		int smoothPower = 5;
+		// Clamp output to int
+		boolean quantise = false;
+
+		// Smooth input
+		boolean average = false;
+		uint8_t smoothSteps = 10;
 };
 
 #endif
